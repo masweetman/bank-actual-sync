@@ -12,6 +12,7 @@ import { createLinkToken, exchangePublicToken, removeItem } from '../clients/pla
 import { requireAuth, getJwtSecret } from './auth.middleware';
 import { runFullSync } from '../jobs/syncJob';
 import { restartScheduler } from '../jobs/scheduler';
+import cron from 'node-cron';
 
 const router = Router();
 const BCRYPT_ROUNDS = 12;
@@ -197,6 +198,12 @@ router.put('/settings', requireAuth, (req: Request, res: Response): void => {
   const ALLOWED_SECRET = ['actual_password'];
 
   const body = req.body as Record<string, unknown>;
+
+  // Validate cron expression before persisting anything
+  if (typeof body['schedule_cron'] === 'string' && !cron.validate(body['schedule_cron'] as string)) {
+    res.status(400).json({ error: 'Invalid cron expression' });
+    return;
+  }
 
   let scheduleChanged = false;
   for (const key of ALLOWED_PLAIN) {

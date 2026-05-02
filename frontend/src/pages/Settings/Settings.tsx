@@ -104,9 +104,7 @@ export function Settings() {
 
   // ── Schedule ───────────────────────────────────────────────────────────────
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
-  const [scheduleHour, setScheduleHour] = useState(4);
-  const [scheduleMinute, setScheduleMinute] = useState(0);
-  const [scheduleDays, setScheduleDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
+  const [scheduleCron, setScheduleCron] = useState('0 4 * * *');
   const [scheduleMsg, setScheduleMsg] = useState('');
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [runNowLoading, setRunNowLoading] = useState(false);
@@ -130,24 +128,11 @@ export function Settings() {
       setActualUrl(s.actual_server_url ?? '');
       setPlaidItems(items);
 
-      // Parse saved schedule settings
+      // Load saved schedule settings
       setScheduleEnabled(s.schedule_enabled === 'true');
+      setScheduleCron(s.schedule_cron ?? '0 4 * * *');
       setScheduleLastRun(s.schedule_last_run);
       setScheduleLastResult(s.schedule_last_result);
-      if (s.schedule_cron) {
-        const parts = s.schedule_cron.split(' ');
-        if (parts.length === 5) {
-          const min = parseInt(parts[0], 10);
-          const hr  = parseInt(parts[1], 10);
-          if (!isNaN(min)) setScheduleMinute(min);
-          if (!isNaN(hr))  setScheduleHour(hr);
-          if (parts[4] === '*') {
-            setScheduleDays([0, 1, 2, 3, 4, 5, 6]);
-          } else {
-            setScheduleDays(parts[4].split(',').map(Number).filter(n => n >= 0 && n <= 6));
-          }
-        }
-      }
     }).catch(() => setLoadError('Failed to load settings'));
   }, [token]);
 
@@ -248,12 +233,14 @@ export function Settings() {
   const handleSaveSchedule = async (e: FormEvent) => {
     e.preventDefault();
     if (!token) return;
-    if (scheduleDays.length === 0) { setScheduleMsg('Select at least one day.'); return; }
-    const days = scheduleDays.length === 7 ? '*' : [...scheduleDays].sort((a, b) => a - b).join(',');
-    const cronExpr = `${scheduleMinute} ${scheduleHour} * * ${days}`;
+    const expr = scheduleCron.trim();
+    if (expr.split(/\s+/).length !== 5) {
+      setScheduleMsg('Invalid cron expression — must have exactly 5 fields (e.g. 0 4 * * *)');
+      return;
+    }
     setScheduleSaving(true); setScheduleMsg('');
     try {
-      await saveSettings(token, { schedule_enabled: scheduleEnabled ? 'true' : 'false', schedule_cron: cronExpr });
+      await saveSettings(token, { schedule_enabled: scheduleEnabled ? 'true' : 'false', schedule_cron: expr });
       setScheduleMsg('Schedule saved.');
     } catch (err) { setScheduleMsg(err instanceof Error ? err.message : 'Save failed'); }
     finally { setScheduleSaving(false); }
@@ -275,12 +262,6 @@ export function Settings() {
       setScheduleLastResult(s.schedule_last_result);
     } catch (err) { setScheduleMsg(err instanceof Error ? err.message : 'Sync failed'); }
     finally { setRunNowLoading(false); }
-  };
-
-  const toggleDay = (day: number) => {
-    setScheduleDays(prev =>
-      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day],
-    );
   };
 
   const handleChangePassword = async (e: FormEvent) => {
@@ -436,50 +417,24 @@ export function Settings() {
             </div>
 
             <div className={styles.field}>
-              <label className={styles.label}>Days of the week</label>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const).map((name, idx) => (
-                  <label key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.875rem', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={scheduleDays.includes(idx)}
-                      onChange={() => toggleDay(idx)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    {name}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className={styles.field} style={{ flexDirection: 'row', gap: '1rem', flexWrap: 'wrap' }}>
-              <div>
-                <label className={styles.label}>Hour</label>
-                <select
-                  className={styles.input}
-                  value={scheduleHour}
-                  onChange={e => setScheduleHour(Number(e.target.value))}
-                  style={{ width: 'auto' }}
-                >
-                  {Array.from({ length: 24 }, (_, i) => {
-                    const display = i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`;
-                    return <option key={i} value={i}>{display}</option>;
-                  })}
-                </select>
-              </div>
-              <div>
-                <label className={styles.label}>Minute</label>
-                <select
-                  className={styles.input}
-                  value={scheduleMinute}
-                  onChange={e => setScheduleMinute(Number(e.target.value))}
-                  style={{ width: 'auto' }}
-                >
-                  {[0, 15, 30, 45].map(m => (
-                    <option key={m} value={m}>:{String(m).padStart(2, '0')}</option>
-                  ))}
-                </select>
-              </div>
+              <label className={styles.label}>Cron expression</label>
+              <input
+                className={styles.input}
+                type="text"
+                value={scheduleCron}
+                onChange={e => setScheduleCron(e.target.value)}
+                placeholder="0 4 * * *"
+                spellCheck={false}
+                style={{ fontFamily: 'monospace' }}
+              />
+              <p className={styles.hint} style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: '#718096' }}>
+                Format: <code>minute hour day-of-month month day-of-week</code>
+                <br />
+                Examples: <code>0 4 * * *</code> (daily 4 AM) &nbsp;·&nbsp;
+                <code>0 */2 * * *</code> (every 2 hours) &nbsp;·&nbsp;
+                <code>0 9 * * 1-5</code> (weekdays 9 AM) &nbsp;·&nbsp;
+                <code>*/30 * * * *</code> (every 30 min)
+              </p>
             </div>
 
             {scheduleMsg && (
