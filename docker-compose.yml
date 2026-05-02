@@ -3,6 +3,7 @@ services:
     image: bank-actual-sync-backend:latest
     build:
       context: ./backend
+    pull_policy: build
     container_name: sync-backend
     restart: unless-stopped
     volumes:
@@ -29,6 +30,7 @@ services:
     image: bank-actual-sync-ui:latest
     build:
       context: ./frontend
+    pull_policy: build
     container_name: sync-ui
     restart: unless-stopped
     ports:
