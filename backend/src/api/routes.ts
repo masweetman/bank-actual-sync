@@ -303,7 +303,7 @@ router.get('/accounts', requireAuth, (_req: Request, res: Response): void => {
 });
 
 router.post('/accounts', requireAuth, (req: Request, res: Response): void => {
-  const { name, plaid_item_id, plaid_account_id, actual_id, actual_server_url, actual_sync_id, actual_password } = req.body as Record<string, unknown>;
+  const { name, plaid_item_id, plaid_account_id, actual_id, actual_sync_id } = req.body as Record<string, unknown>;
   if (!name || !plaid_item_id || !plaid_account_id || !actual_id ||
     typeof name !== 'string' || typeof plaid_item_id !== 'string' ||
     typeof plaid_account_id !== 'string' || typeof actual_id !== 'string') {
@@ -312,15 +312,13 @@ router.post('/accounts', requireAuth, (req: Request, res: Response): void => {
   }
   const account = accountRepository.create({
     name, plaid_item_id, plaid_account_id, actual_id,
-    actual_server_url: typeof actual_server_url === 'string' ? actual_server_url : undefined,
-    actual_sync_id:    typeof actual_sync_id    === 'string' ? actual_sync_id    : undefined,
-    actual_password:   typeof actual_password   === 'string' ? actual_password   : undefined,
+    actual_sync_id: typeof actual_sync_id === 'string' ? actual_sync_id : undefined,
   });
   res.status(201).json(account);
 });
 
 router.put('/accounts/:id', requireAuth, (req: Request, res: Response): void => {
-  const { name, actual_id, actual_server_url, actual_sync_id, actual_password } = req.body as Record<string, unknown>;
+  const { name, actual_id, actual_sync_id } = req.body as Record<string, unknown>;
   if (!name || !actual_id || typeof name !== 'string' || typeof actual_id !== 'string') {
     res.status(400).json({ error: 'name and actual_id are required strings' });
     return;
@@ -328,9 +326,7 @@ router.put('/accounts/:id', requireAuth, (req: Request, res: Response): void => 
   accountRepository.update(req.params.id, {
     name,
     actual_id,
-    actual_server_url: typeof actual_server_url === 'string' ? actual_server_url : undefined,
-    actual_sync_id:    typeof actual_sync_id    === 'string' ? actual_sync_id    : undefined,
-    actual_password:   typeof actual_password   === 'string' ? actual_password   : undefined,
+    actual_sync_id: typeof actual_sync_id === 'string' ? actual_sync_id : undefined,
   });
   res.json({ success: true });
 });
@@ -344,14 +340,13 @@ router.delete('/accounts/:id', requireAuth, (req: Request, res: Response): void 
 
 /** Fetch available accounts from an Actual Budget server (for linking) */
 router.post('/actual/accounts', requireAuth, async (req: Request, res: Response): Promise<void> => {
-  const { serverUrl, syncId, password } = req.body as Record<string, unknown>;
-  if (!serverUrl || !syncId || !password ||
-    typeof serverUrl !== 'string' || typeof syncId !== 'string' || typeof password !== 'string') {
-    res.status(400).json({ error: 'serverUrl, syncId, and password are required' });
+  const { syncId } = req.body as Record<string, unknown>;
+  if (!syncId || typeof syncId !== 'string') {
+    res.status(400).json({ error: 'syncId is required' });
     return;
   }
   try {
-    const accounts = await fetchActualAccounts(serverUrl, syncId, password);
+    const accounts = await fetchActualAccounts(syncId);
     res.json(accounts);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to fetch Actual accounts' });

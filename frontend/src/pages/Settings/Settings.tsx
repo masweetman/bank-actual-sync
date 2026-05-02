@@ -104,7 +104,6 @@ export function Settings() {
   // ── Actual Budget ───────────────────────────────────────────────────────
   const [actualUrl, setActualUrl] = useState('');
   const [actualPass, setActualPass] = useState('');
-  const [actualBudgetId, setActualBudgetId] = useState('');
   const [actualSaving, setActualSaving] = useState(false);
   const [actualMsg, setActualMsg] = useState('');
 
@@ -141,7 +140,6 @@ export function Settings() {
     ]).then(([s, items]) => {
       setSettings(s);
       setActualUrl(s.actual_server_url ?? '');
-      setActualBudgetId(s.actual_budget_id ?? '');
       setPlaidItems(items);
 
       // Parse saved schedule settings
@@ -272,7 +270,6 @@ export function Settings() {
     try {
       await saveSettings(token, {
         actual_server_url: actualUrl,
-        actual_budget_id: actualBudgetId,
         ...(actualPass ? { actual_password: actualPass } : {}),
       });
       setActualPass('');
@@ -501,11 +498,6 @@ export function Settings() {
             <label className={styles.label}>Password</label>
             <input className={styles.input} type="password" value={actualPass} onChange={e => setActualPass(e.target.value)}
               placeholder="Leave blank to keep current" autoComplete="new-password" />
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>Budget ID</label>
-            <input className={styles.input} type="text" value={actualBudgetId} onChange={e => setActualBudgetId(e.target.value)}
-              placeholder="e.g. abc123-..." />
           </div>
           {actualMsg && <p className={actualMsg.includes('aved') ? styles.success : styles.error}>{actualMsg}</p>}
           <button className={styles.saveBtn} type="submit" disabled={actualSaving}>{actualSaving ? 'Saving…' : 'Save'}</button>

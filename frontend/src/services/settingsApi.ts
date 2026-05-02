@@ -159,7 +159,7 @@ export async function createAccount(
 export async function updateAccount(
   token: string,
   id: string,
-  data: { name: string; actual_id: string; actual_server_url?: string; actual_sync_id?: string; actual_password?: string },
+  data: { name: string; actual_id: string; actual_sync_id?: string },
 ): Promise<void> {
   const res = await fetch(`${API}/accounts/${id}`, {
     method: 'PUT',
@@ -187,14 +187,12 @@ export async function deleteAccount(token: string, id: string): Promise<void> {
 
 export async function fetchActualAccounts(
   token: string,
-  serverUrl: string,
   syncId: string,
-  password: string,
 ): Promise<ActualAccount[]> {
   const res = await fetch(`${API}/actual/accounts`, {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify({ serverUrl, syncId, password }),
+    body: JSON.stringify({ syncId }),
   });
   if (!res.ok) {
     const { error } = (await res.json()) as { error: string };

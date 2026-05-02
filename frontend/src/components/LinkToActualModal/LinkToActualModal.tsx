@@ -14,9 +14,7 @@ type Step = 'credentials' | 'select';
 
 export function LinkToActualModal({ token, account, onClose, onSaved }: LinkToActualModalProps) {
   const [step, setStep] = useState<Step>('credentials');
-  const [serverUrl, setServerUrl] = useState('');
   const [syncId, setSyncId] = useState('');
-  const [password, setPassword] = useState('');
   const [actualAccounts, setActualAccounts] = useState<ActualAccount[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -27,7 +25,7 @@ export function LinkToActualModal({ token, account, onClose, onSaved }: LinkToAc
     setLoading(true);
     setError('');
     try {
-      const accounts = await fetchActualAccounts(token, serverUrl, syncId, password);
+      const accounts = await fetchActualAccounts(token, syncId);
       setActualAccounts(accounts);
       setSelectedId(accounts[0]?.id ?? null);
       setStep('select');
@@ -46,9 +44,7 @@ export function LinkToActualModal({ token, account, onClose, onSaved }: LinkToAc
       await updateAccount(token, account.id, {
         name: account.name,
         actual_id: selectedId,
-        actual_server_url: serverUrl,
         actual_sync_id: syncId,
-        actual_password: password,
       });
       onSaved();
     } catch (err) {
@@ -79,19 +75,6 @@ export function LinkToActualModal({ token, account, onClose, onSaved }: LinkToAc
         {step === 'credentials' && (
           <form onSubmit={handleConnect} className={styles.form}>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="lta-server-url">Actual Server URL</label>
-              <input
-                id="lta-server-url"
-                className={styles.input}
-                type="url"
-                value={serverUrl}
-                onChange={e => setServerUrl(e.target.value)}
-                placeholder="https://your-actual-server.example.com"
-                required
-                autoFocus
-              />
-            </div>
-            <div className={styles.field}>
               <label className={styles.label} htmlFor="lta-sync-id">Sync ID</label>
               <input
                 id="lta-sync-id"
@@ -101,19 +84,7 @@ export function LinkToActualModal({ token, account, onClose, onSaved }: LinkToAc
                 onChange={e => setSyncId(e.target.value)}
                 placeholder="e.g. abc123-..."
                 required
-              />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="lta-password">Password</label>
-              <input
-                id="lta-password"
-                className={styles.input}
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Actual Budget password"
-                autoComplete="off"
-                required
+                autoFocus
               />
             </div>
             {error && <p className={styles.error}>{error}</p>}

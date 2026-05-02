@@ -2,6 +2,7 @@ import * as actualApi from '@actual-app/api';
 import path from 'path';
 import fs from 'fs';
 import { accountRepository } from '../db/accountRepository';
+import { settingsRepo } from '../db/settingsRepository';
 import type { Transaction, SyncResult, ActualAccount } from '../types';
 
 const ACTUAL_CACHE = path.resolve(process.cwd(), '../data/actual-cache');
@@ -15,41 +16,50 @@ export async function importStagedTransactions(
 ): Promise<SyncResult> {
   const result: SyncResult = { imported: 0, skipped: 0, errors: [], failedIds: [] };
 
+  // Read global Actual Budget credentials
+  const serverURL = settingsRepo.get('actual_server_url') ?? '';
+  const password  = settingsRepo.get('actual_password')   ?? '';
+  if (!serverURL || !password) {
+    for (const t of transactions) result.failedIds.push(t.id);
+    result.errors.push(
+      'Actual Budget credentials not configured — set server URL and password in Settings.'
+    );
+    return result;
+  }
+
   // Group by Actual account UUID
   const byAccount = groupByAccount(transactions);
 
-  // Look up per-account credentials and re-group by budget (serverUrl+syncId)
+  // Look up per-account sync info and group by syncId (one budget open per unique syncId)
   type BudgetGroup = {
-    serverURL: string;
     syncId: string;
-    password: string;
-    accounts: Record<string, Transaction[]>;
+    accounts: Record<string, { txns: Transaction[]; name: string }>;
   };
   const budgets = new Map<string, BudgetGroup>();
 
   for (const [actualAccountId, txns] of Object.entries(byAccount)) {
-    const creds = accountRepository.getCredentials(actualAccountId);
-    if (!creds || !creds.actual_server_url || !creds.actual_sync_id || !creds.actual_password) {
+    const info = accountRepository.getSyncInfo(actualAccountId);
+    if (!info || !info.actual_sync_id) {
+      const label = info?.name ?? actualAccountId;
       result.errors.push(
-        `Account ${actualAccountId}: Actual Budget credentials not configured — link this account on the Banks page.`
+        `Account ${label}: not linked to Actual Budget — link it on the Banks page.`
       );
       for (const t of txns) result.failedIds.push(t.id);
       continue;
     }
-    const key = `${creds.actual_server_url}|${creds.actual_sync_id}`;
-    if (!budgets.has(key)) {
-      budgets.set(key, { serverURL: creds.actual_server_url, syncId: creds.actual_sync_id, password: creds.actual_password, accounts: {} });
+    if (!budgets.has(info.actual_sync_id)) {
+      budgets.set(info.actual_sync_id, { syncId: info.actual_sync_id, accounts: {} });
     }
-    budgets.get(key)!.accounts[actualAccountId] = txns;
+    budgets.get(info.actual_sync_id)!.accounts[actualAccountId] = { txns, name: info.name };
   }
 
-  // Process each unique Actual Budget
-  for (const { serverURL, syncId, password, accounts } of budgets.values()) {
+  // Process each unique Actual Budget (open once per syncId)
+  for (const { syncId, accounts } of budgets.values()) {
     try {
       await actualApi.init({ serverURL, password, dataDir: ACTUAL_CACHE });
       await actualApi.downloadBudget(syncId);
 
-      for (const [actualAccountId, txns] of Object.entries(accounts)) {
+      for (const [actualAccountId, { txns, name }] of Object.entries(accounts)) {
         try {
           const actualTxns = txns.map(t => ({
             account: actualAccountId,
@@ -64,14 +74,14 @@ export async function importStagedTransactions(
           result.imported += txns.length;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          result.errors.push(`Account ${actualAccountId}: ${msg}`);
+          result.errors.push(`Account ${name}: ${msg}`);
           for (const t of txns) result.failedIds.push(t.id);
         }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      for (const [actualAccountId, txns] of Object.entries(accounts)) {
-        result.errors.push(`Account ${actualAccountId}: ${msg}`);
+      for (const { txns, name } of Object.values(accounts)) {
+        result.errors.push(`Account ${name}: ${msg}`);
         for (const t of txns) result.failedIds.push(t.id);
       }
     } finally {
@@ -97,11 +107,16 @@ function groupByAccount(transactions: Transaction[]): Record<string, Transaction
   return grouped;
 }
 
-export async function fetchActualAccounts(
-  serverURL: string,
-  syncId: string,
-  password: string,
-): Promise<ActualAccount[]> {
+export async function fetchActualAccounts(syncId: string): Promise<ActualAccount[]> {
+  // Read global credentials — must be configured in Settings before linking
+  const serverURL = settingsRepo.get('actual_server_url') ?? '';
+  const password  = settingsRepo.get('actual_password')   ?? '';
+  if (!serverURL || !password) {
+    throw new Error(
+      'Actual Budget server URL and password must be configured in Settings before linking accounts.'
+    );
+  }
+
   // Always start with a clean cache to avoid stale/corrupt SQLite state
   if (fs.existsSync(ACTUAL_CACHE)) {
     fs.rmSync(ACTUAL_CACHE, { recursive: true, force: true });

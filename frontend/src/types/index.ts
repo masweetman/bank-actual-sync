@@ -16,7 +16,6 @@ export interface Account {
   plaid_item_id: string;
   plaid_account_id: string;
   actual_id: string;
-  actual_server_url: string;
   actual_sync_id: string;
   created_at: string;
 }
@@ -68,7 +67,6 @@ export interface ActualAccount {
 
 export interface AppSettings {
   actual_server_url: string;
-  actual_budget_id: string;
   totp_enabled: string;
   schedule_enabled?: string;
   schedule_cron?: string;
