@@ -29,6 +29,8 @@ import apiRouter from './api/routes';
 import { plaidRepository } from './db/plaidRepository';
 import { repository } from './db/repository';
 import { getJwtSecret } from './api/auth.middleware';
+import bcrypt from 'bcrypt';
+import { settingsRepo } from './db/settingsRepository';
 import { runPlaidSync } from './jobs/syncJob';
 import { startScheduler } from './jobs/scheduler';
 
@@ -40,6 +42,18 @@ process.on('unhandledRejection', (reason) => {
 });
 
 initDb();
+
+// ─── Seed default password ────────────────────────────────────────────────────
+// If no admin password has been set yet, seed "password" so Docker deployments
+// have a known credential on first boot. Change it immediately after login.
+if (!settingsRepo.has('admin_password_hash')) {
+  (async () => {
+    const hash = await bcrypt.hash('password', 12);
+    settingsRepo.set('admin_password_hash', hash);
+    console.log('[server] Default admin password seeded. Change it immediately after first login.');
+  })();
+}
+
 startScheduler();
 
 const app  = express();

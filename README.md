@@ -94,13 +94,14 @@ The UI listens on `127.0.0.1:3081`. To access it from your network or the intern
 ## Step 6 — First-time setup
 
 1. Open the app in your browser.
-2. You will be prompted to **create an admin password** on first launch.
-3. Go to **Settings** to:
+2. Log in with the default password: **`password`**
+3. **Change the password immediately** — go to **Settings → Security → Change Password**.
+4. Go to **Settings** to:
    - Connect your bank accounts via the **Plaid Link** flow.
    - Enter your **Actual Budget** server URL, budget ID, and password.
    - Map each Plaid account to an account in Actual Budget.
-4. Return to the **Dashboard** and click **Sync** to pull transactions.
-5. Review the staged transactions, then click **Sync to Actual** to import them.
+5. Return to the **Dashboard** and click **Sync** to pull transactions.
+6. Review the staged transactions, then click **Sync to Actual** to import them.
 
 ---
 
