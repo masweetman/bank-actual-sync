@@ -1,5 +1,6 @@
 services:
   sync-backend:
+    image: bank-actual-sync-backend:latest
     build:
       context: ./backend
     container_name: sync-backend
@@ -15,6 +16,7 @@ services:
       - budget-net
 
   sync-ui:
+    image: bank-actual-sync-ui:latest
     build:
       context: ./frontend
     container_name: sync-ui

@@ -39,15 +39,36 @@ docker network connect budget-net <actual-budget-container-name>
 
 ---
 
-## Step 2 — Add the stack in Portainer
+## Step 2 — Build the images on the Docker host
 
-1. In Portainer, go to **Stacks → Add stack**.
-2. Name the stack (e.g. `bank-actual-sync`).
-3. Choose **Repository** and point it at this repo, or paste the contents of `docker-compose.yml` into the **Web editor**.
+Portainer's web editor only deploys a YAML file — it does **not** have access to your source code, so `build:` contexts will fail. You must build the images on the Docker host first.
+
+SSH into your Docker host and run:
+
+```bash
+# Clone or copy the repo onto the host
+git clone <your-repo-url> bank-actual-sync
+cd bank-actual-sync
+
+# Build both images
+docker compose build
+```
+
+This tags the images as `bank-actual-sync-backend:latest` and `bank-actual-sync-ui:latest` on the host. They are now available for Portainer to use.
+
+> **Re-deploying after a code change:** SSH in, `git pull && docker compose build` in the repo directory, then redeploy the stack in Portainer.
 
 ---
 
-## Step 3 — Set environment variables
+## Step 3 — Add the stack in Portainer
+
+1. In Portainer, go to **Stacks → Add stack**.
+2. Name the stack (e.g. `bank-actual-sync`).
+3. Choose **Web editor** and paste the contents of `docker-compose.yml`.
+
+---
+
+## Step 4 — Set environment variables
 
 In the Portainer stack editor, scroll to **Environment variables** and add the following:
 
@@ -68,9 +89,9 @@ openssl rand -hex 32
 
 ---
 
-## Step 4 — Deploy
+## Step 5 — Deploy
 
-Click **Deploy the stack**. Portainer will build both images and start the containers.
+Click **Deploy the stack**. Portainer will use the pre-built images from the Docker host and start the containers.
 
 To check logs:
 
@@ -80,7 +101,7 @@ Portainer → Stacks → bank-actual-sync → Logs (on each container)
 
 ---
 
-## Step 5 — Set up a reverse proxy (optional but recommended)
+## Step 6 — Set up a reverse proxy (optional but recommended)
 
 The UI listens on `127.0.0.1:3000`. To access it from your network or the internet, add a proxy host in **Nginx Proxy Manager**:
 
@@ -90,7 +111,7 @@ The UI listens on `127.0.0.1:3000`. To access it from your network or the intern
 
 ---
 
-## Step 6 — First-time setup
+## Step 7 — First-time setup
 
 1. Open the app in your browser.
 2. You will be prompted to **create an admin password** on first launch.
@@ -124,13 +145,17 @@ docker run --rm \
 
 ## Updating
 
-To pull the latest code and rebuild:
+To pick up code changes:
 
-1. In Portainer, go to **Stacks → bank-actual-sync**.
-2. If deploying from a Git repo, click **Pull and redeploy**.
-3. If using the web editor, update the compose file and click **Update the stack**.
+1. SSH into the Docker host and pull the latest code:
+   ```bash
+   cd bank-actual-sync
+   git pull
+   docker compose build
+   ```
+2. In Portainer, go to **Stacks → bank-actual-sync → Update the stack**.
 
-Portainer will rebuild the images from source and restart the containers with zero data loss (the `sync-data` volume is preserved).
+Portainer will restart the containers using the newly built images. The `sync-data` volume is preserved.
 
 ---
 
