@@ -1,0 +1,262 @@
+.container {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.count {
+  background: #e9ecef;
+  color: #495057;
+  border-radius: 12px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.refreshBtn {
+  padding: 0.4rem 0.75rem;
+  background: #6c757d;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.refreshBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.syncBtn {
+  padding: 0.4rem 1rem;
+  background: #0066cc;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.syncBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.syncBtn:hover:not(:disabled) {
+  background: #0052a3;
+}
+
+.syncResult {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.syncErrors {
+  color: #856404;
+}
+
+.syncError {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.pendingNote {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8125rem;
+  margin-bottom: 0.75rem;
+}
+
+.empty {
+  color: #888;
+  font-style: italic;
+  margin: 0;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid #dee2e6;
+  font-weight: 600;
+  color: #495057;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.row:hover {
+  background: #f8f9fa;
+}
+
+.pending {
+  background: #fffdf0;
+}
+
+.pending:hover {
+  background: #fffae6;
+}
+
+.payee {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6c757d;
+  font-size: 0.8125rem;
+}
+
+.amountCol {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.debit {
+  color: #c0392b;
+}
+
+.credit {
+  color: #27ae60;
+}
+
+.cleared {
+  background: #d4edda;
+  color: #155724;
+  border-radius: 3px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.pendingBadge {
+  background: #fff3cd;
+  color: #856404;
+  border-radius: 3px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.excludeBtn {
+  padding: 0.2rem 0.6rem;
+  background: transparent;
+  color: #6c757d;
+  border: 1px solid #6c757d;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.excludeBtn:hover {
+  background: #6c757d;
+  color: #fff;
+}
+
+.resetBtn {
+  padding: 0.2rem 0.6rem;
+  background: transparent;
+  color: #856404;
+  border: 1px solid #856404;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.resetBtn:hover {
+  background: #856404;
+  color: #fff;
+}
+
+.syncedSection {
+  margin-top: 1.5rem;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 1rem;
+}
+
+.syncedToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #495057;
+  padding: 0;
+  margin-bottom: 0.75rem;
+}
+
+.syncedToggle:hover {
+  color: #212529;
+}
+
+.syncedRow {
+  opacity: 0.7;
+}
+
+.syncedRow:hover {
+  background: #f8f9fa;
+  opacity: 1;
+}

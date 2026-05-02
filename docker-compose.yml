@@ -1,0 +1,25 @@
+services:
+  sync-backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    env_file: .env
+    networks:
+      - budget-net
+
+  sync-ui:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"    # Only bind to localhost; Nginx Proxy Manager handles external TLS
+    networks:
+      - budget-net
+    depends_on:
+      - sync-backend
+
+networks:
+  budget-net:
+    external: true
