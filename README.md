@@ -9,7 +9,7 @@ Syncs transactions from bank accounts (via [Plaid](https://plaid.com)) into [Act
 | `sync-backend` | Node.js/Express API, SQLite database, Plaid integration |
 | `sync-ui` | React SPA served by Nginx, proxies API calls to backend |
 
-The frontend is only bound to `127.0.0.1:3000`. It is intended to sit behind **Nginx Proxy Manager** (or a similar reverse proxy) for TLS termination.
+The frontend is only bound to `127.0.0.1:3081`. It is intended to sit behind **Nginx Proxy Manager** (or a similar reverse proxy) for TLS termination.
 
 Both services join an external Docker network (`budget-net`) so they can reach your existing Actual Budget container.
 
@@ -39,36 +39,16 @@ docker network connect budget-net <actual-budget-container-name>
 
 ---
 
-## Step 2 — Build the images on the Docker host
-
-Portainer's web editor only deploys a YAML file — it does **not** have access to your source code, so `build:` contexts will fail. You must build the images on the Docker host first.
-
-SSH into your Docker host and run:
-
-```bash
-# Clone or copy the repo onto the host
-git clone <your-repo-url> bank-actual-sync
-cd bank-actual-sync
-
-# Build both images
-docker compose build
-```
-
-This tags the images as `bank-actual-sync-backend:latest` and `bank-actual-sync-ui:latest` on the host. They are now available for Portainer to use.
-
-> **Re-deploying after a code change:** SSH in, `git pull && docker compose build` in the repo directory, then redeploy the stack in Portainer.
-
----
-
-## Step 3 — Add the stack in Portainer
+## Step 2 — Add the stack in Portainer
 
 1. In Portainer, go to **Stacks → Add stack**.
 2. Name the stack (e.g. `bank-actual-sync`).
-3. Choose **Web editor** and paste the contents of `docker-compose.yml`.
+3. Choose **Repository**, enter your git repo URL, and set the compose file path to `docker-compose.yml`.
+4. Portainer will clone the repo and build the images automatically on deploy.
 
 ---
 
-## Step 4 — Set environment variables
+## Step 3 — Set environment variables
 
 In the Portainer stack editor, scroll to **Environment variables** and add the following:
 
@@ -89,9 +69,9 @@ openssl rand -hex 32
 
 ---
 
-## Step 5 — Deploy
+## Step 4 — Deploy
 
-Click **Deploy the stack**. Portainer will use the pre-built images from the Docker host and start the containers.
+Click **Deploy the stack**. Portainer will clone the repo, build both images, and start the containers.
 
 To check logs:
 
@@ -101,17 +81,17 @@ Portainer → Stacks → bank-actual-sync → Logs (on each container)
 
 ---
 
-## Step 6 — Set up a reverse proxy (optional but recommended)
+## Step 5 — Set up a reverse proxy (optional but recommended)
 
-The UI listens on `127.0.0.1:3000`. To access it from your network or the internet, add a proxy host in **Nginx Proxy Manager**:
+The UI listens on `127.0.0.1:3081`. To access it from your network or the internet, add a proxy host in **Nginx Proxy Manager**:
 
 - **Forward hostname / IP:** `localhost`
-- **Forward port:** `3000`
+- **Forward port:** `3081`
 - Enable **SSL** with a Let's Encrypt certificate for HTTPS access.
 
 ---
 
-## Step 7 — First-time setup
+## Step 6 — First-time setup
 
 1. Open the app in your browser.
 2. You will be prompted to **create an admin password** on first launch.
@@ -145,17 +125,9 @@ docker run --rm \
 
 ## Updating
 
-To pick up code changes:
+To pick up code changes, push your updates to the git repo, then in Portainer go to **Stacks → bank-actual-sync** and click **Pull and redeploy**.
 
-1. SSH into the Docker host and pull the latest code:
-   ```bash
-   cd bank-actual-sync
-   git pull
-   docker compose build
-   ```
-2. In Portainer, go to **Stacks → bank-actual-sync → Update the stack**.
-
-Portainer will restart the containers using the newly built images. The `sync-data` volume is preserved.
+Portainer will pull the latest code, rebuild the images, and restart the containers. The `sync-data` volume is preserved.
 
 ---
 

@@ -22,7 +22,7 @@ services:
     container_name: sync-ui
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"    # Only bind to localhost; Nginx Proxy Manager handles external TLS
+      - "127.0.0.1:3081:3081"    # Only bind to localhost; Nginx Proxy Manager handles external TLS
     networks:
       - budget-net
     depends_on:
