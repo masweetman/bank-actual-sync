@@ -2,16 +2,22 @@ services:
   sync-backend:
     build:
       context: ./backend
+    container_name: sync-backend
     restart: unless-stopped
     volumes:
-      - ./data:/app/data
-    env_file: .env
+      - sync-data:/app/data
+    environment:
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - PLAID_CLIENT_ID=${PLAID_CLIENT_ID}
+      - PLAID_SECRET=${PLAID_SECRET}
+      - PLAID_ENV=${PLAID_ENV:-production}
     networks:
       - budget-net
 
   sync-ui:
     build:
       context: ./frontend
+    container_name: sync-ui
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"    # Only bind to localhost; Nginx Proxy Manager handles external TLS
@@ -19,6 +25,9 @@ services:
       - budget-net
     depends_on:
       - sync-backend
+
+volumes:
+  sync-data:
 
 networks:
   budget-net:
