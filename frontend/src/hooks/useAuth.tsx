@@ -24,11 +24,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
 
   useEffect(() => {
-    getAuthStatus()
-      .then(({ setup_required }) => {
-        setState(setup_required ? { status: 'setup_required' } : { status: 'unauthenticated' });
-      })
-      .catch(() => setState({ status: 'unauthenticated' }));
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 6;
+
+    const attempt = () => {
+      getAuthStatus()
+        .then(({ setup_required }) => {
+          if (!cancelled) {
+            setState(setup_required ? { status: 'setup_required' } : { status: 'unauthenticated' });
+          }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          attempts += 1;
+          if (attempts < MAX_ATTEMPTS) {
+            setTimeout(attempt, 2000);
+          } else {
+            setState({ status: 'unauthenticated' });
+          }
+        });
+    };
+
+    attempt();
+    return () => { cancelled = true; };
   }, []);
 
   const login = useCallback(async (password: string) => {

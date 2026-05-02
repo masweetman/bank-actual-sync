@@ -14,6 +14,16 @@ services:
       - PLAID_ENV=${PLAID_ENV:-production}
     networks:
       - budget-net
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://localhost:3001/api/auth/status', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   sync-ui:
     image: bank-actual-sync-ui:latest
@@ -22,11 +32,12 @@ services:
     container_name: sync-ui
     restart: unless-stopped
     ports:
-      - "3081:3081"
+      - "127.0.0.1:3081:3081"
     networks:
       - budget-net
     depends_on:
-      - sync-backend
+      sync-backend:
+        condition: service_healthy
 
 volumes:
   sync-data:

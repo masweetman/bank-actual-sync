@@ -8,6 +8,7 @@ function authHeaders(token: string): HeadersInit {
 
 export async function getAuthStatus(): Promise<AuthStatus> {
   const res = await fetch(`${API}/auth/status`);
+  if (!res.ok) throw new Error(`Auth status check failed: ${res.status}`);
   return res.json() as Promise<AuthStatus>;
 }
 
