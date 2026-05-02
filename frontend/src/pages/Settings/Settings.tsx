@@ -9,16 +9,16 @@ import {
   runScheduleNow,
 } from '../../services/settingsApi';
 import { LinkToActualModal } from '../../components/LinkToActualModal/LinkToActualModal';
-import type { AppSettings, PlaidItem, PlaidAccountInfo } from '../../types';
+import type { AppSettings, PlaidItem } from '../../types';
 import styles from './Settings.module.css';
 
 type Tab = 'banks' | 'actual' | 'security' | 'schedule';
 
-// ─── Inline account row with edit-in-place ───────────────────────────────────
+// ─── Inline account row ───────────────────────────────────────────────────────
 
 interface AccountRowProps {
-  acct: { id: string; name: string; actual_id: string; plaid_account_id: string };
-  onUpdate: (name: string, actualId: string) => Promise<void>;
+  acct: { id: string; name: string; plaid_account_id: string };
+  onUpdate: (name: string) => Promise<void>;
   onDelete: () => void;
   onLinkToActual: () => void;
 }
@@ -26,12 +26,11 @@ interface AccountRowProps {
 function AccountRow({ acct, onUpdate, onDelete, onLinkToActual }: AccountRowProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(acct.name);
-  const [actualId, setActualId] = useState(acct.actual_id);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
     setSaving(true);
-    await onUpdate(name, actualId);
+    await onUpdate(name);
     setSaving(false);
     setEditing(false);
   };
@@ -40,9 +39,8 @@ function AccountRow({ acct, onUpdate, onDelete, onLinkToActual }: AccountRowProp
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4rem 0', fontSize: '0.875rem' }}>
         <span style={{ flex: 1 }}>{acct.name}</span>
-        <span style={{ fontFamily: 'monospace', color: '#555', fontSize: '0.8rem' }}>{acct.actual_id || '—'}</span>
         <button className={styles.ghostBtn} type="button" onClick={onLinkToActual}>Link to Actual</button>
-        <button className={styles.ghostBtn} type="button" onClick={() => setEditing(true)}>Edit</button>
+        <button className={styles.ghostBtn} type="button" onClick={() => setEditing(true)}>Rename</button>
         <button className={styles.dangerGhostBtn} type="button" onClick={onDelete}>Remove</button>
       </div>
     );
@@ -51,9 +49,8 @@ function AccountRow({ acct, onUpdate, onDelete, onLinkToActual }: AccountRowProp
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0' }}>
       <input className={styles.input} type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Display name" style={{ flex: 1 }} />
-      <input className={styles.input} type="text" value={actualId} onChange={e => setActualId(e.target.value)} placeholder="Actual Budget UUID" style={{ flex: 1 }} />
       <button className={styles.saveBtn} type="button" onClick={save} disabled={saving}>{saving ? '…' : 'Save'}</button>
-      <button className={styles.ghostBtn} type="button" onClick={() => { setEditing(false); setName(acct.name); setActualId(acct.actual_id); }}>Cancel</button>
+      <button className={styles.ghostBtn} type="button" onClick={() => { setEditing(false); setName(acct.name); }}>Cancel</button>
     </div>
   );
 }
@@ -79,13 +76,6 @@ function PlaidConnectButton({ linkToken, onSuccess }: PlaidConnectButtonProps) {
 
 // ─── Pending account mapping (shown after Plaid Link success) ────────────────
 
-interface PendingMapping {
-  plaidItemId: string;
-  institution_name: string;
-  accounts: PlaidAccountInfo[];
-  mapping: Record<string, { name: string; actual_id: string }>; // keyed by plaid account_id
-}
-
 export function Settings() {
   const { token, logout } = useAuth();
   const [tab, setTab] = useState<Tab>('banks');
@@ -97,8 +87,6 @@ export function Settings() {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
   const [banksMsg, setBanksMsg] = useState('');
-  const [pendingMapping, setPendingMapping] = useState<PendingMapping | null>(null);
-  const [savingMapping, setSavingMapping] = useState(false);
   const [linkingAccount, setLinkingAccount] = useState<{ id: string; name: string } | null>(null);
 
   // ── Actual Budget ───────────────────────────────────────────────────────
@@ -182,42 +170,20 @@ export function Settings() {
     try {
       const { item, accounts } = await exchangePlaidToken(token, publicToken);
       setLinkToken(null);
-      // Build initial mapping state
-      const mapping: Record<string, { name: string; actual_id: string }> = {};
       for (const a of accounts) {
-        mapping[a.account_id] = { name: a.official_name ?? a.name, actual_id: '' };
+        await createAccount(token, {
+          name: a.official_name ?? a.name,
+          plaid_item_id: item.id,
+          plaid_account_id: a.account_id,
+        });
       }
-      setPendingMapping({ plaidItemId: item.id, institution_name: item.institution_name, accounts, mapping });
+      const items = await listPlaidItems(token);
+      setPlaidItems(items);
+      setBanksMsg('Bank connected. Use “Link to Actual” to connect each account to your budget.');
     } catch (err) {
       setBanksMsg(err instanceof Error ? err.message : 'Failed to connect bank');
     }
   }, [token]);
-
-  const handleSaveMapping = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!token || !pendingMapping) return;
-    setSavingMapping(true); setBanksMsg('');
-    try {
-      for (const [plaidAccountId, fields] of Object.entries(pendingMapping.mapping)) {
-        if (!fields.actual_id.trim()) continue; // skip unmapped accounts
-        await createAccount(token, {
-          name: fields.name,
-          plaid_item_id: pendingMapping.plaidItemId,
-          plaid_account_id: plaidAccountId,
-          actual_id: fields.actual_id.trim(),
-        });
-      }
-      // Refresh items list
-      const items = await listPlaidItems(token);
-      setPlaidItems(items);
-      setPendingMapping(null);
-      setBanksMsg('Bank connected successfully.');
-    } catch (err) {
-      setBanksMsg(err instanceof Error ? err.message : 'Failed to save account mapping');
-    } finally {
-      setSavingMapping(false);
-    }
-  };
 
   const handleDisconnectItem = async (itemId: string, name: string) => {
     if (!token) return;
@@ -248,14 +214,15 @@ export function Settings() {
     }
   };
 
-  const handleUpdateAccount = async (accountId: string, plaidItemId: string, name: string, actualId: string) => {
+  const handleUpdateAccount = async (accountId: string, plaidItemId: string, name: string) => {
     if (!token) return;
     setBanksMsg('');
     try {
-      await updateAccount(token, accountId, { name, actual_id: actualId });
+      const existing = plaidItems.flatMap(i => i.accounts).find(a => a.id === accountId);
+      await updateAccount(token, accountId, { name, actual_id: existing?.actual_id ?? '' });
       setPlaidItems(prev => prev.map(item =>
         item.id === plaidItemId
-          ? { ...item, accounts: item.accounts.map(a => a.id === accountId ? { ...a, name, actual_id: actualId } : a) }
+          ? { ...item, accounts: item.accounts.map(a => a.id === accountId ? { ...a, name } : a) }
           : item,
       ));
     } catch (err) {
@@ -383,105 +350,47 @@ export function Settings() {
         <div className={styles.banksContainer}>
           {banksMsg && <p className={banksMsg.toLowerCase().includes('fail') || banksMsg.toLowerCase().includes('error') ? styles.error : styles.success}>{banksMsg}</p>}
 
-          {/* Pending account mapping after Plaid Link */}
-          {pendingMapping && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>Map accounts — {pendingMapping.institution_name}</h2>
-              <p className={styles.qrInstructions}>
-                Enter an Actual Budget account ID for each account you want to sync. Leave blank to skip an account.
-              </p>
-              <form onSubmit={handleSaveMapping} className={styles.form}>
-                {pendingMapping.accounts.map(acct => (
-                  <div key={acct.account_id} className={styles.field}>
-                    <label className={styles.label}>
-                      {acct.official_name ?? acct.name}
-                      {acct.mask && <span className={styles.hint}> ····{acct.mask}</span>}
-                      <span className={styles.hint}> ({acct.type}{acct.subtype ? `/${acct.subtype}` : ''})</span>
-                    </label>
-                    <input
-                      className={styles.input}
-                      type="text"
-                      placeholder="Actual Budget account UUID (blank to skip)"
-                      value={pendingMapping.mapping[acct.account_id]?.actual_id ?? ''}
-                      onChange={e => setPendingMapping(prev => prev ? {
-                        ...prev,
-                        mapping: {
-                          ...prev.mapping,
-                          [acct.account_id]: { ...prev.mapping[acct.account_id], actual_id: e.target.value },
-                        },
-                      } : prev)}
-                    />
-                    <input
-                      className={styles.input}
-                      type="text"
-                      placeholder="Display name"
-                      value={pendingMapping.mapping[acct.account_id]?.name ?? ''}
-                      onChange={e => setPendingMapping(prev => prev ? {
-                        ...prev,
-                        mapping: {
-                          ...prev.mapping,
-                          [acct.account_id]: { ...prev.mapping[acct.account_id], name: e.target.value },
-                        },
-                      } : prev)}
-                      style={{ marginTop: '0.25rem' }}
-                    />
-                  </div>
-                ))}
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button className={styles.saveBtn} type="submit" disabled={savingMapping}>
-                    {savingMapping ? 'Saving…' : 'Save Mapping'}
-                  </button>
-                  <button className={styles.ghostBtn} type="button" onClick={() => { setPendingMapping(null); setLinkToken(null); }}>
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </section>
-          )}
-
           {/* Connected banks list */}
-          {!pendingMapping && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>Connected Banks</h2>
-              {plaidItems.length === 0 && (
-                <p className={styles.qrInstructions}>No banks connected yet. Click below to add one.</p>
-              )}
-              {plaidItems.map(item => (
-                <div key={item.id} style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <strong>{item.institution_name}</strong>
-                    <button className={styles.dangerGhostBtn} type="button"
-                      onClick={() => handleDisconnectItem(item.id, item.institution_name)}>
-                      Disconnect
-                    </button>
-                  </div>
-                  {item.accounts.length === 0 && (
-                    <p className={styles.qrInstructions} style={{ margin: 0 }}>No accounts mapped.</p>
-                  )}
-                  {item.accounts.map(acct => (
-                    <AccountRow
-                      key={acct.id}
-                      acct={acct}
-                      onUpdate={(name, actualId) => handleUpdateAccount(acct.id, item.id, name, actualId)}
-                      onDelete={() => handleDeleteAccount(acct.id, item.id)}
-                      onLinkToActual={() => setLinkingAccount({ id: acct.id, name: acct.name })}
-                    />
-                  ))}
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Connected Banks</h2>
+            {plaidItems.length === 0 && (
+              <p className={styles.qrInstructions}>No banks connected yet. Click below to add one.</p>
+            )}
+            {plaidItems.map(item => (
+              <div key={item.id} style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <strong>{item.institution_name}</strong>
+                  <button className={styles.dangerGhostBtn} type="button"
+                    onClick={() => handleDisconnectItem(item.id, item.institution_name)}>
+                    Disconnect
+                  </button>
                 </div>
-              ))}
-              <div style={{ marginTop: '0.75rem' }}>
-                {linkToken
-                  ? <PlaidConnectButton linkToken={linkToken} onSuccess={handlePlaidSuccess} />
-                  : (
-                    <button className={styles.saveBtn} type="button"
-                      onClick={handleConnectBank} disabled={linkLoading}>
-                      {linkLoading ? 'Loading…' : '+ Connect a Bank'}
-                    </button>
-                  )
-                }
+                {item.accounts.length === 0 && (
+                  <p className={styles.qrInstructions} style={{ margin: 0 }}>No accounts mapped.</p>
+                )}
+                {item.accounts.map(acct => (
+                  <AccountRow
+                    key={acct.id}
+                    acct={acct}
+                    onUpdate={(name) => handleUpdateAccount(acct.id, item.id, name)}
+                    onDelete={() => handleDeleteAccount(acct.id, item.id)}
+                    onLinkToActual={() => setLinkingAccount({ id: acct.id, name: acct.name })}
+                  />
+                ))}
               </div>
-            </section>
-          )}
+            ))}
+            <div style={{ marginTop: '0.75rem' }}>
+              {linkToken
+                ? <PlaidConnectButton linkToken={linkToken} onSuccess={handlePlaidSuccess} />
+                : (
+                  <button className={styles.saveBtn} type="button"
+                    onClick={handleConnectBank} disabled={linkLoading}>
+                    {linkLoading ? 'Loading…' : '+ Connect a Bank'}
+                  </button>
+                )
+              }
+            </div>
+          </section>
         </div>
       )}
 

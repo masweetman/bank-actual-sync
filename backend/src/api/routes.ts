@@ -304,14 +304,15 @@ router.get('/accounts', requireAuth, (_req: Request, res: Response): void => {
 
 router.post('/accounts', requireAuth, (req: Request, res: Response): void => {
   const { name, plaid_item_id, plaid_account_id, actual_id, actual_sync_id } = req.body as Record<string, unknown>;
-  if (!name || !plaid_item_id || !plaid_account_id || !actual_id ||
+  if (!name || !plaid_item_id || !plaid_account_id ||
     typeof name !== 'string' || typeof plaid_item_id !== 'string' ||
-    typeof plaid_account_id !== 'string' || typeof actual_id !== 'string') {
-    res.status(400).json({ error: 'name, plaid_item_id, plaid_account_id, and actual_id are required strings' });
+    typeof plaid_account_id !== 'string') {
+    res.status(400).json({ error: 'name, plaid_item_id, and plaid_account_id are required strings' });
     return;
   }
   const account = accountRepository.create({
-    name, plaid_item_id, plaid_account_id, actual_id,
+    name, plaid_item_id, plaid_account_id,
+    actual_id:    typeof actual_id    === 'string' ? actual_id    : '',
     actual_sync_id: typeof actual_sync_id === 'string' ? actual_sync_id : undefined,
   });
   res.status(201).json(account);

@@ -142,7 +142,7 @@ export async function getAccounts(token: string): Promise<Account[]> {
 
 export async function createAccount(
   token: string,
-  data: { name: string; plaid_item_id: string; plaid_account_id: string; actual_id: string },
+  data: { name: string; plaid_item_id: string; plaid_account_id: string; actual_id?: string },
 ): Promise<Account> {
   const res = await fetch(`${API}/accounts`, {
     method: 'POST',
