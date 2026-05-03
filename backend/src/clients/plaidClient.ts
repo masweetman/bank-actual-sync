@@ -47,6 +47,21 @@ export async function createLinkToken(userId: string): Promise<string> {
   return response.data.link_token;
 }
 
+/**
+ * Creates a Link token for update mode (re-authentication of an existing Item).
+ * Note: `products` must NOT be passed when `access_token` is provided.
+ */
+export async function createUpdateLinkToken(accessToken: string): Promise<string> {
+  const response = await client().linkTokenCreate({
+    user: { client_user_id: 'admin' },
+    client_name: 'Bank Actual Sync',
+    access_token: accessToken,
+    country_codes: [CountryCode.Us],
+    language: 'en',
+  });
+  return response.data.link_token;
+}
+
 // ─── Token Exchange ───────────────────────────────────────────────────────────
 
 export interface PlaidAccountInfo {

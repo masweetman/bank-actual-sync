@@ -132,6 +132,20 @@ export async function deletePlaidItem(token: string, itemId: string): Promise<vo
   }
 }
 
+export async function createReconnectLinkToken(token: string, itemId: string): Promise<string> {
+  const res = await fetch(`${API}/plaid/reconnect-link-token`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ item_id: itemId }),
+  });
+  if (!res.ok) {
+    const { error } = (await res.json()) as { error: string };
+    throw new Error(error ?? 'Failed to create reconnect link token');
+  }
+  const { link_token } = (await res.json()) as { link_token: string };
+  return link_token;
+}
+
 // ─── Accounts ─────────────────────────────────────────────────────────────────
 
 export async function getAccounts(token: string): Promise<Account[]> {

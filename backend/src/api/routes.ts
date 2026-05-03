@@ -8,7 +8,7 @@ import { settingsRepo } from '../db/settingsRepository';
 import { accountRepository } from '../db/accountRepository';
 import { plaidRepository } from '../db/plaidRepository';
 import { importStagedTransactions, fetchActualAccounts } from '../clients/actualClient';
-import { createLinkToken, exchangePublicToken, removeItem } from '../clients/plaidClient';
+import { createLinkToken, createUpdateLinkToken, exchangePublicToken, removeItem } from '../clients/plaidClient';
 import { requireAuth, getJwtSecret } from './auth.middleware';
 import { runFullSync } from '../jobs/syncJob';
 import { restartScheduler } from '../jobs/scheduler';
@@ -249,6 +249,26 @@ router.post('/plaid/link-token', requireAuth, async (_req: Request, res: Respons
     res.json({ link_token: linkToken });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to create link token' });
+  }
+});
+
+/** Create an update-mode Link token so the frontend can re-authenticate an existing Plaid Item */
+router.post('/plaid/reconnect-link-token', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { item_id } = req.body as { item_id?: string };
+  if (!item_id || typeof item_id !== 'string') {
+    res.status(400).json({ error: 'item_id is required' });
+    return;
+  }
+  const accessToken = plaidRepository.getAccessToken(item_id);
+  if (!accessToken) {
+    res.status(404).json({ error: 'Item not found' });
+    return;
+  }
+  try {
+    const linkToken = await createUpdateLinkToken(accessToken);
+    res.json({ link_token: linkToken });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to create reconnect link token' });
   }
 });
 

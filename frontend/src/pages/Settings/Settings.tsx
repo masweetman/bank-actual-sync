@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import {
   getSettings, saveSettings, changePassword,
   setup2FA, enable2FA, disable2FA,
-  createLinkToken, exchangePlaidToken, listPlaidItems, deletePlaidItem,
+  createLinkToken, exchangePlaidToken, listPlaidItems, deletePlaidItem, createReconnectLinkToken,
   createAccount, updateAccount, deleteAccount,
   runScheduleNow,
 } from '../../services/settingsApi';
@@ -73,7 +73,22 @@ function PlaidConnectButton({ linkToken, onSuccess }: PlaidConnectButtonProps) {
     </button>
   );
 }
+interface ReconnectButtonProps {
+  linkToken: string;
+  onSuccess: () => void;
+}
 
+function ReconnectButton({ linkToken, onSuccess }: ReconnectButtonProps) {
+  const { open, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess: () => onSuccess(),
+  });
+  return (
+    <button className={styles.ghostBtn} type="button" onClick={() => open()} disabled={!ready}>
+      Reconnect
+    </button>
+  );
+}
 // ─── Pending account mapping (shown after Plaid Link success) ────────────────
 
 export function Settings() {
@@ -87,6 +102,8 @@ export function Settings() {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
   const [banksMsg, setBanksMsg] = useState('');
+  const [reconnectState, setReconnectState] = useState<{ itemId: string; linkToken: string } | null>(null);
+  const [reconnectLoading, setReconnectLoading] = useState<string | null>(null);
   const [linkingAccount, setLinkingAccount] = useState<{ id: string; name: string } | null>(null);
 
   // ── Actual Budget ───────────────────────────────────────────────────────
@@ -168,6 +185,27 @@ export function Settings() {
     } catch (err) {
       setBanksMsg(err instanceof Error ? err.message : 'Failed to connect bank');
     }
+  }, [token]);
+
+  const handleReconnectBank = async (itemId: string) => {
+    if (!token) return;
+    setReconnectLoading(itemId); setBanksMsg('');
+    try {
+      const lt = await createReconnectLinkToken(token, itemId);
+      setReconnectState({ itemId, linkToken: lt });
+    } catch (err) {
+      setBanksMsg(err instanceof Error ? err.message : 'Failed to start reconnection');
+    } finally {
+      setReconnectLoading(null);
+    }
+  };
+
+  const handleReconnectSuccess = useCallback(async () => {
+    if (!token) return;
+    setReconnectState(null);
+    const items = await listPlaidItems(token);
+    setPlaidItems(items);
+    setBanksMsg('Bank reconnected successfully.');
   }, [token]);
 
   const handleDisconnectItem = async (itemId: string, name: string) => {
@@ -341,10 +379,22 @@ export function Settings() {
               <div key={item.id} style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <strong>{item.institution_name}</strong>
-                  <button className={styles.dangerGhostBtn} type="button"
-                    onClick={() => handleDisconnectItem(item.id, item.institution_name)}>
-                    Disconnect
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {reconnectState?.itemId === item.id
+                      ? <ReconnectButton linkToken={reconnectState.linkToken} onSuccess={handleReconnectSuccess} />
+                      : (
+                        <button className={styles.ghostBtn} type="button"
+                          onClick={() => void handleReconnectBank(item.id)}
+                          disabled={reconnectLoading === item.id}>
+                          {reconnectLoading === item.id ? 'Loading…' : 'Reconnect'}
+                        </button>
+                      )
+                    }
+                    <button className={styles.dangerGhostBtn} type="button"
+                      onClick={() => handleDisconnectItem(item.id, item.institution_name)}>
+                      Disconnect
+                    </button>
+                  </div>
                 </div>
                 {item.accounts.length === 0 && (
                   <p className={styles.qrInstructions} style={{ margin: 0 }}>No accounts mapped.</p>
