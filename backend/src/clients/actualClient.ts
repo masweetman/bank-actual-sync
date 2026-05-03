@@ -27,8 +27,16 @@ export async function importStagedTransactions(
     return result;
   }
 
+  // Transactions without an Actual account mapping can't be imported — keep them staged for retry
+  for (const t of transactions) {
+    if (!t.actual_account_id) {
+      result.failedIds.push(t.id);
+    }
+  }
+  const linked = transactions.filter(t => t.actual_account_id);
+
   // Group by Actual account UUID
-  const byAccount = groupByAccount(transactions);
+  const byAccount = groupByAccount(linked);
 
   // Look up per-account sync info and group by syncId (one budget open per unique syncId)
   type BudgetGroup = {
