@@ -38,6 +38,12 @@ export async function runPlaidSync(): Promise<PlaidSyncResult> {
     try {
       const syncResult = await syncTransactions(accessToken, item.cursor);
 
+      const pendingFromPlaid = syncResult.added.filter(t => t.pending);
+      console.log(`[syncJob] ${item.institution_name}: ${syncResult.added.length} added, ${syncResult.modified.length} modified, ${syncResult.removed.length} removed, ${pendingFromPlaid.length} pending`);
+      if (pendingFromPlaid.length > 0) {
+        console.log('[syncJob] pending tx ids:', pendingFromPlaid.map(t => t.transaction_id));
+      }
+
       const accounts = accountRepository.listByItem(item.id);
       const accountMap = new Map(accounts.map(a => [a.plaid_account_id, a]));
 
@@ -50,6 +56,9 @@ export async function runPlaidSync(): Promise<PlaidSyncResult> {
           const acct = accountMap.get(t.account_id)!;
           return toInternalTransaction(t, acct.name, acct.actual_id);
         });
+
+      const pendingToUpsert = txsToUpsert.filter(t => !t.cleared);
+      console.log(`[syncJob] ${item.institution_name}: upserting ${txsToUpsert.length} txs (${pendingToUpsert.length} pending/uncleared)`);
 
       if (txsToUpsert.length > 0) {
         repository.upsertMany(txsToUpsert);
