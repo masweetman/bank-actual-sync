@@ -26,10 +26,11 @@ export function initDb(): void {
       amount            INTEGER NOT NULL,
       payee             TEXT NOT NULL,
       memo              TEXT NOT NULL DEFAULT '',
-      cleared           INTEGER NOT NULL DEFAULT 0,
-      status            TEXT NOT NULL DEFAULT 'staged'
-                          CHECK(status IN ('staged', 'synced', 'excluded')),
-      fetched_at        TEXT NOT NULL
+      cleared                INTEGER NOT NULL DEFAULT 0,
+      pending_transaction_id TEXT DEFAULT NULL,
+      status                 TEXT NOT NULL DEFAULT 'staged'
+                               CHECK(status IN ('staged', 'synced', 'excluded')),
+      fetched_at             TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
@@ -67,6 +68,13 @@ export function initDb(): void {
   // Migration: add actual_account_id to transactions if it doesn't exist yet
   try {
     db.exec(`ALTER TABLE transactions ADD COLUMN actual_account_id TEXT NOT NULL DEFAULT ''`);
+  } catch {
+    // Column already exists — normal on fresh DBs created with the new schema
+  }
+
+  // Migration: add pending_transaction_id column if it doesn't exist yet
+  try {
+    db.exec(`ALTER TABLE transactions ADD COLUMN pending_transaction_id TEXT DEFAULT NULL`);
   } catch {
     // Column already exists — normal on fresh DBs created with the new schema
   }

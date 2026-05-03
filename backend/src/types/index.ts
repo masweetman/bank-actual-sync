@@ -29,6 +29,7 @@ export interface Transaction {
   payee: string;
   memo: string;
   cleared: boolean;
+  pending_transaction_id: string | null; // Plaid ID of the pending tx this cleared tx was matched from
   status: TransactionStatus;
   fetched_at: string;        // ISO timestamp
 }

@@ -10,12 +10,13 @@ interface RawRow {
   payee: string;
   memo: string;
   cleared: number | bigint;
+  pending_transaction_id: string | null;
   status: TransactionStatus;
   fetched_at: string;
 }
 
 function toTransaction(row: RawRow): Transaction {
-  return { ...row, cleared: Number(row.cleared) === 1 };
+  return { ...row, cleared: Number(row.cleared) === 1, pending_transaction_id: row.pending_transaction_id ?? null };
 }
 
 // Lazy statement cache — prepared after initDb() has created the tables
@@ -27,7 +28,7 @@ let _markSynced: ReturnType<typeof db.prepare> | null = null;
 let _markExcluded: ReturnType<typeof db.prepare> | null = null;
 let _markStaged: ReturnType<typeof db.prepare> | null = null;
 
-function upsertStmt()      { return _upsert      ??= db.prepare(`INSERT INTO transactions (id, bank_account, actual_account_id, date, amount, payee, memo, cleared, status, fetched_at) VALUES ($id, $bank_account, $actual_account_id, $date, $amount, $payee, $memo, $cleared, 'staged', $fetched_at) ON CONFLICT(id) DO UPDATE SET date=excluded.date,amount=excluded.amount,payee=excluded.payee,memo=excluded.memo,cleared=excluded.cleared,actual_account_id=excluded.actual_account_id,fetched_at=excluded.fetched_at WHERE transactions.status='staged'`); }
+function upsertStmt()      { return _upsert      ??= db.prepare(`INSERT INTO transactions (id, bank_account, actual_account_id, date, amount, payee, memo, cleared, pending_transaction_id, status, fetched_at) VALUES ($id, $bank_account, $actual_account_id, $date, $amount, $payee, $memo, $cleared, $pending_transaction_id, 'staged', $fetched_at) ON CONFLICT(id) DO UPDATE SET date=excluded.date,amount=excluded.amount,payee=excluded.payee,memo=excluded.memo,cleared=excluded.cleared,pending_transaction_id=excluded.pending_transaction_id,actual_account_id=excluded.actual_account_id,fetched_at=excluded.fetched_at WHERE transactions.status='staged'`); }
 function listStagedStmt()  { return _listStaged  ??= db.prepare(`SELECT * FROM transactions WHERE status='staged' ORDER BY date DESC, fetched_at DESC`); }
 function listSyncedStmt()  { return _listSynced  ??= db.prepare(`SELECT * FROM transactions WHERE status='synced' ORDER BY date DESC, fetched_at DESC`); }
 function deleteStagedStmt(){ return _deleteStaged ??= db.prepare(`DELETE FROM transactions WHERE id=? AND status='staged'`); }
@@ -48,6 +49,7 @@ export const repository = {
         $payee: t.payee,
         $memo: t.memo,
         $cleared: t.cleared ? 1 : 0,
+        $pending_transaction_id: t.pending_transaction_id ?? null,
         $fetched_at: t.fetched_at,
       });
     }

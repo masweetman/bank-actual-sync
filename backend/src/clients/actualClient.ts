@@ -61,17 +61,74 @@ export async function importStagedTransactions(
 
       for (const [actualAccountId, { txns, name }] of Object.entries(accounts)) {
         try {
-          const actualTxns = txns.map(t => ({
-            account: actualAccountId,
-            date: t.date,
-            amount: t.amount,
-            imported_id: t.id,
-            payee_name: t.payee,
-            notes: t.memo,
-            cleared: t.cleared,
-          }));
-          await actualApi.importTransactions(actualAccountId, actualTxns);
-          result.imported += txns.length;
+          // Split into pending (uncleared) and cleared transactions
+          const pendingTxns  = txns.filter(t => !t.cleared);
+          const clearedTxns  = txns.filter(t => t.cleared);
+
+          // Pass A — import pending transactions as uncleared
+          if (pendingTxns.length > 0) {
+            const actualPending = pendingTxns.map(t => ({
+              account: actualAccountId,
+              date: t.date,
+              amount: t.amount,
+              imported_id: t.id,
+              payee_name: t.payee,
+              notes: t.memo,
+              cleared: false,
+            }));
+            await actualApi.importTransactions(actualAccountId, actualPending);
+            result.imported += pendingTxns.length;
+          }
+
+          // Pass B — handle cleared transactions
+          if (clearedTxns.length > 0) {
+            const withPendingId    = clearedTxns.filter(t => t.pending_transaction_id !== null);
+            const withoutPendingId = clearedTxns.filter(t => t.pending_transaction_id === null);
+            const toImport: typeof clearedTxns = [...withoutPendingId];
+
+            // Attempt to match cleared txs back to their pending counterparts in Actual
+            if (withPendingId.length > 0) {
+              const dates = withPendingId.map(t => t.date).sort();
+              const startDate = subtractDays(dates[0], 7);
+              const today = new Date().toISOString().slice(0, 10);
+
+              const existingTxns = await (actualApi as any).getTransactions(actualAccountId, startDate, today) as Array<{ id: string; cleared: boolean; imported_id?: string }>;
+
+              // Build lookup: pending Plaid transaction_id → Actual transaction UUID
+              const unclearedById = new Map<string, string>();
+              for (const tx of existingTxns) {
+                if (!tx.cleared && tx.imported_id) {
+                  unclearedById.set(tx.imported_id, tx.id);
+                }
+              }
+
+              for (const t of withPendingId) {
+                const actualId = unclearedById.get(t.pending_transaction_id!);
+                if (actualId) {
+                  // Mark the existing pending transaction as cleared
+                  await (actualApi as any).updateTransaction(actualId, { cleared: true });
+                  result.imported += 1;
+                } else {
+                  // Pending was never imported (or already cleared) — import as new
+                  toImport.push(t);
+                }
+              }
+            }
+
+            if (toImport.length > 0) {
+              const actualCleared = toImport.map(t => ({
+                account: actualAccountId,
+                date: t.date,
+                amount: t.amount,
+                imported_id: t.id,
+                payee_name: t.payee,
+                notes: t.memo,
+                cleared: true,
+              }));
+              await actualApi.importTransactions(actualAccountId, actualCleared);
+              result.imported += toImport.length;
+            }
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           result.errors.push(`Account ${name}: ${msg}`);
@@ -105,6 +162,13 @@ function groupByAccount(transactions: Transaction[]): Record<string, Transaction
     grouped[id].push(t);
   }
   return grouped;
+}
+
+/** Returns a YYYY-MM-DD date string that is `days` days before `dateStr`. */
+function subtractDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
 }
 
 export async function fetchActualAccounts(syncId: string): Promise<ActualAccount[]> {

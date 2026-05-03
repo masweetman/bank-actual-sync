@@ -126,6 +126,7 @@ export interface PlaidTransaction {
   merchant_name: string | null;
   amount: number;          // positive = debit, negative = credit (Plaid convention)
   pending: boolean;
+  pending_transaction_id: string | null; // ID of the pending tx this posted tx was matched from
   category: string[] | null;
 }
 
@@ -179,6 +180,7 @@ function mapPlaidTransaction(t: {
   merchant_name?: string | null;
   amount: number;
   pending: boolean;
+  pending_transaction_id?: string | null;
   category?: string[] | null;
 }): PlaidTransaction {
   return {
@@ -190,6 +192,7 @@ function mapPlaidTransaction(t: {
     merchant_name: t.merchant_name ?? null,
     amount: t.amount,
     pending: t.pending,
+    pending_transaction_id: t.pending_transaction_id ?? null,
     category: t.category ?? null,
   };
 }
@@ -220,6 +223,7 @@ export function toInternalTransaction(
     payee: plaidTx.merchant_name ?? plaidTx.name,
     memo: '',
     cleared: !plaidTx.pending,
+    pending_transaction_id: plaidTx.pending_transaction_id,
     status: 'staged',
     fetched_at: new Date().toISOString(),
   };
