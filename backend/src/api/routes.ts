@@ -347,13 +347,13 @@ router.post('/accounts', requireAuth, (req: Request, res: Response): void => {
 
 router.put('/accounts/:id', requireAuth, (req: Request, res: Response): void => {
   const { name, actual_id, actual_sync_id } = req.body as Record<string, unknown>;
-  if (!name || !actual_id || typeof name !== 'string' || typeof actual_id !== 'string') {
-    res.status(400).json({ error: 'name and actual_id are required strings' });
+  if (!name || typeof name !== 'string') {
+    res.status(400).json({ error: 'name is a required string' });
     return;
   }
   accountRepository.update(req.params.id, {
     name,
-    actual_id,
+    actual_id: typeof actual_id === 'string' ? actual_id : undefined,
     actual_sync_id: typeof actual_sync_id === 'string' ? actual_sync_id : undefined,
   });
   res.json({ success: true });

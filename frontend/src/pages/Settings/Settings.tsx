@@ -17,7 +17,7 @@ type Tab = 'banks' | 'actual' | 'security' | 'schedule';
 // ─── Inline account row ───────────────────────────────────────────────────────
 
 interface AccountRowProps {
-  acct: { id: string; name: string; plaid_account_id: string };
+  acct: { id: string; name: string; plaid_account_id: string; actual_id: string };
   onUpdate: (name: string) => Promise<void>;
   onDelete: () => void;
   onLinkToActual: () => void;
@@ -38,7 +38,14 @@ function AccountRow({ acct, onUpdate, onDelete, onLinkToActual }: AccountRowProp
   if (!editing) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.4rem 0', fontSize: '0.875rem' }}>
-        <span style={{ flex: 1 }}>{acct.name}</span>
+        <span style={{ flex: 1 }}>
+          {acct.name}
+          {acct.actual_id && (
+            <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted, #888)', fontSize: '0.75em', fontFamily: 'monospace' }}>
+              {acct.actual_id}
+            </span>
+          )}
+        </span>
         <button className={styles.ghostBtn} type="button" onClick={onLinkToActual}>Link to Actual</button>
         <button className={styles.ghostBtn} type="button" onClick={() => setEditing(true)}>Rename</button>
         <button className={styles.dangerGhostBtn} type="button" onClick={onDelete}>Remove</button>
@@ -241,8 +248,7 @@ export function Settings() {
     if (!token) return;
     setBanksMsg('');
     try {
-      const existing = plaidItems.flatMap(i => i.accounts).find(a => a.id === accountId);
-      await updateAccount(token, accountId, { name, actual_id: existing?.actual_id ?? '' });
+      await updateAccount(token, accountId, { name });
       setPlaidItems(prev => prev.map(item =>
         item.id === plaidItemId
           ? { ...item, accounts: item.accounts.map(a => a.id === accountId ? { ...a, name } : a) }

@@ -173,7 +173,7 @@ export async function createAccount(
 export async function updateAccount(
   token: string,
   id: string,
-  data: { name: string; actual_id: string; actual_sync_id?: string },
+  data: { name: string; actual_id?: string; actual_sync_id?: string },
 ): Promise<void> {
   const res = await fetch(`${API}/accounts/${id}`, {
     method: 'PUT',
