@@ -9,11 +9,53 @@ export interface PlaidItem {
   created_at: string;
 }
 
+export interface TellerEnrollment {
+  id: string;
+  enrollment_id: string;
+  institution_name: string;
+  last_synced_at: string | null;
+  created_at: string;
+}
+
+export interface TellerAccount {
+  id: string;
+  enrollment_id: string;
+  institution: { id: string; name: string };
+  name: string;
+  type: string;
+  subtype: string;
+  status: string;
+  last_four: string;
+  currency: string;
+}
+
+export interface TellerTransaction {
+  id: string;
+  account_id: string;
+  amount: string; // signed decimal string, positive = debit
+  date: string;   // YYYY-MM-DD
+  description: string;
+  details: {
+    processing_status: string;
+    category: string | null;
+    counterparty: { name: string | null; type: string | null } | null;
+  };
+  status: 'posted' | 'pending';
+  type: string;
+  running_balance: string | null;
+}
+
 export interface Account {
   id: string;
   name: string;
-  plaid_item_id: string;
-  plaid_account_id: string;
+  provider: 'plaid' | 'teller';
+  // Plaid fields
+  plaid_item_id: string | null;
+  plaid_account_id: string | null;
+  // Teller fields
+  teller_enrollment_id: string | null;
+  teller_account_id: string | null;
+  // Actual Budget
   actual_id: string;
   actual_server_url: string;
   actual_sync_id: string;

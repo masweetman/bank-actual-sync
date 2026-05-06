@@ -31,7 +31,7 @@ import { repository } from './db/repository';
 import { getJwtSecret } from './api/auth.middleware';
 import bcrypt from 'bcrypt';
 import { settingsRepo } from './db/settingsRepository';
-import { runPlaidSync } from './jobs/syncJob';
+import { runPlaidSync, runTellerSync } from './jobs/syncJob';
 import { startScheduler } from './jobs/scheduler';
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
@@ -126,7 +126,9 @@ io.on('connection', (socket) => {
     });
 
     try {
-      const { totalAdded, errors } = await runPlaidSync();
+      const [plaidResult, tellerResult] = await Promise.all([runPlaidSync(), runTellerSync()]);
+      const totalAdded = plaidResult.totalAdded + tellerResult.totalAdded;
+      const errors = [...plaidResult.errors, ...tellerResult.errors];
       const staged = repository.listStaged();
 
       socket.emit('sync_event', {

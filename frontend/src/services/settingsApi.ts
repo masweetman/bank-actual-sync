@@ -1,4 +1,4 @@
-import type { AppSettings, AuthStatus, Account, ActualAccount, PlaidItem, PlaidAccountInfo } from '../types';
+import type { AppSettings, AuthStatus, Account, ActualAccount, PlaidItem, PlaidAccountInfo, TellerEnrollment } from '../types';
 
 const API = '/api';
 
@@ -219,6 +219,7 @@ export async function fetchActualAccounts(
 
 export interface RunNowResult {
   plaid: { totalAdded: number; errors: string[] };
+  teller: { totalAdded: number; errors: string[] };
   actual: { imported: number; skipped: number; errors: string[]; failedIds: string[] };
 }
 
@@ -232,4 +233,55 @@ export async function runScheduleNow(token: string): Promise<RunNowResult> {
     throw new Error(error ?? 'Sync failed');
   }
   return res.json() as Promise<RunNowResult>;
+}
+
+// ─── Teller ───────────────────────────────────────────────────────────────────
+
+export async function saveTellerEnrollment(
+  token: string,
+  data: { accessToken: string; enrollmentId: string; institutionName: string },
+): Promise<TellerEnrollment> {
+  const res = await fetch(`${API}/teller/enrollments`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const { error } = (await res.json()) as { error: string };
+    throw new Error(error ?? 'Failed to save Teller enrollment');
+  }
+  return res.json() as Promise<TellerEnrollment>;
+}
+
+export async function listTellerEnrollments(token: string): Promise<TellerEnrollment[]> {
+  const res = await fetch(`${API}/teller/enrollments`, { headers: authHeaders(token) });
+  if (!res.ok) throw new Error('Failed to load Teller enrollments');
+  return res.json() as Promise<TellerEnrollment[]>;
+}
+
+export async function deleteTellerEnrollment(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API}/teller/enrollments/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    const { error } = (await res.json()) as { error: string };
+    throw new Error(error ?? 'Failed to disconnect Teller enrollment');
+  }
+}
+
+export async function createTellerAccount(
+  token: string,
+  data: { name: string; teller_enrollment_id: string; teller_account_id: string; actual_id?: string },
+): Promise<Account> {
+  const res = await fetch(`${API}/accounts`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const { error } = (await res.json()) as { error: string };
+    throw new Error(error ?? 'Failed to create Teller account mapping');
+  }
+  return res.json() as Promise<Account>;
 }

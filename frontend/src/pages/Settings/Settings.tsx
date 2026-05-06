@@ -6,10 +6,12 @@ import {
   setup2FA, enable2FA, disable2FA,
   createLinkToken, exchangePlaidToken, listPlaidItems, deletePlaidItem, createReconnectLinkToken,
   createAccount, updateAccount, deleteAccount,
+  saveTellerEnrollment, listTellerEnrollments, deleteTellerEnrollment, createTellerAccount,
   runScheduleNow,
 } from '../../services/settingsApi';
 import { LinkToActualModal } from '../../components/LinkToActualModal/LinkToActualModal';
-import type { AppSettings, PlaidItem } from '../../types';
+import { TellerConnectButton } from '../../components/TellerConnectButton/TellerConnectButton';
+import type { AppSettings, PlaidItem, TellerEnrollment, TellerAccountInfo } from '../../types';
 import styles from './Settings.module.css';
 
 type Tab = 'banks' | 'actual' | 'security' | 'schedule';
@@ -17,7 +19,7 @@ type Tab = 'banks' | 'actual' | 'security' | 'schedule';
 // ─── Inline account row ───────────────────────────────────────────────────────
 
 interface AccountRowProps {
-  acct: { id: string; name: string; plaid_account_id: string; actual_id: string };
+  acct: { id: string; name: string; plaid_account_id?: string | null; actual_id: string };
   onUpdate: (name: string) => Promise<void>;
   onDelete: () => void;
   onLinkToActual: () => void;
@@ -113,6 +115,15 @@ export function Settings() {
   const [reconnectLoading, setReconnectLoading] = useState<string | null>(null);
   const [linkingAccount, setLinkingAccount] = useState<{ id: string; name: string } | null>(null);
 
+  // ── Teller enrollments ─────────────────────────────────────────────────────
+  const [tellerEnrollments, setTellerEnrollments] = useState<TellerEnrollment[]>([]);
+  const [tellerAppId, setTellerAppId] = useState('');
+  const [tellerEnv, setTellerEnv] = useState<'sandbox' | 'development' | 'production'>('sandbox');
+  const [tellerCert, setTellerCert] = useState('');
+  const [tellerKey, setTellerKey] = useState('');
+  const [tellerSettingsSaving, setTellerSettingsSaving] = useState(false);
+  const [tellerSettingsMsg, setTellerSettingsMsg] = useState('');
+
   // ── Actual Budget ───────────────────────────────────────────────────────
   const [actualUrl, setActualUrl] = useState('');
   const [actualPass, setActualPass] = useState('');
@@ -147,10 +158,16 @@ export function Settings() {
     Promise.all([
       getSettings(token),
       listPlaidItems(token),
-    ]).then(([s, items]) => {
+      listTellerEnrollments(token),
+    ]).then(([s, items, enrollments]) => {
       setSettings(s);
       setActualUrl(s.actual_server_url ?? '');
       setPlaidItems(items);
+      setTellerEnrollments(enrollments);
+
+      // Load saved Teller settings
+      setTellerAppId(s.teller_application_id ?? '');
+      setTellerEnv((s.teller_env ?? 'sandbox') as 'sandbox' | 'development' | 'production');
 
       // Load saved schedule settings
       setScheduleEnabled(s.schedule_enabled === 'true');
@@ -259,6 +276,97 @@ export function Settings() {
     }
   };
 
+  const handleTellerSuccess = useCallback(async (accessToken: string, enrollmentId: string, institutionName: string) => {
+    if (!token) return;
+    setBanksMsg('');
+    try {
+      await saveTellerEnrollment(token, { accessToken, enrollmentId, institutionName });
+      const enrollments = await listTellerEnrollments(token);
+      setTellerEnrollments(enrollments);
+      setBanksMsg('Teller bank connected. Use the account list below to map accounts to your budget.');
+    } catch (err) {
+      setBanksMsg(err instanceof Error ? err.message : 'Failed to connect Teller bank');
+    }
+  }, [token]);
+
+  const handleDisconnectTellerEnrollment = async (enrollmentId: string, name: string) => {
+    if (!token) return;
+    if (!confirm(`Disconnect ${name}? This will remove all associated account mappings.`)) return;
+    setBanksMsg('');
+    try {
+      await deleteTellerEnrollment(token, enrollmentId);
+      setTellerEnrollments(prev => prev.filter(e => e.id !== enrollmentId));
+      setBanksMsg(`${name} disconnected.`);
+    } catch (err) {
+      setBanksMsg(err instanceof Error ? err.message : 'Failed to disconnect');
+    }
+  };
+
+  const handleMapTellerAccount = async (enrollmentId: string, tellerAcct: TellerAccountInfo) => {
+    if (!token) return;
+    setBanksMsg('');
+    try {
+      await createTellerAccount(token, {
+        name: tellerAcct.name,
+        teller_enrollment_id: enrollmentId,
+        teller_account_id: tellerAcct.id,
+      });
+      const enrollments = await listTellerEnrollments(token);
+      setTellerEnrollments(enrollments);
+    } catch (err) {
+      setBanksMsg(err instanceof Error ? err.message : 'Failed to map account');
+    }
+  };
+
+  const handleDeleteTellerAccount = async (accountId: string, enrollmentId: string) => {
+    if (!token) return;
+    if (!confirm('Remove this account mapping?')) return;
+    setBanksMsg('');
+    try {
+      await deleteAccount(token, accountId);
+      setTellerEnrollments(prev => prev.map(e =>
+        e.id === enrollmentId
+          ? { ...e, accounts: e.accounts.filter(a => a.id !== accountId) }
+          : e,
+      ));
+    } catch (err) {
+      setBanksMsg(err instanceof Error ? err.message : 'Failed to remove account');
+    }
+  };
+
+  const handleUpdateTellerAccount = async (accountId: string, enrollmentId: string, name: string) => {
+    if (!token) return;
+    setBanksMsg('');
+    try {
+      await updateAccount(token, accountId, { name });
+      setTellerEnrollments(prev => prev.map(e =>
+        e.id === enrollmentId
+          ? { ...e, accounts: e.accounts.map(a => a.id === accountId ? { ...a, name } : a) }
+          : e,
+      ));
+    } catch (err) {
+      setBanksMsg(err instanceof Error ? err.message : 'Failed to update account');
+    }
+  };
+
+  const saveTellerSettings = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setTellerSettingsSaving(true); setTellerSettingsMsg('');
+    try {
+      await saveSettings(token, {
+        teller_application_id: tellerAppId,
+        teller_env: tellerEnv,
+        ...(tellerCert ? { teller_cert: tellerCert } : {}),
+        ...(tellerKey  ? { teller_key:  tellerKey  } : {}),
+      } as Parameters<typeof saveSettings>[1]);
+      setTellerCert(''); setTellerKey('');
+      setSettings(s => s ? { ...s, teller_application_id: tellerAppId, teller_env: tellerEnv, teller_configured: (tellerCert && tellerKey) ? 'true' : s.teller_configured } : s);
+      setTellerSettingsMsg('Teller settings saved.');
+    } catch (err) { setTellerSettingsMsg(err instanceof Error ? err.message : 'Save failed'); }
+    finally { setTellerSettingsSaving(false); }
+  };
+
   const saveActual = async (e: FormEvent) => {
     e.preventDefault();
     if (!token) return;
@@ -295,10 +403,11 @@ export function Settings() {
     setRunNowLoading(true); setScheduleMsg('');
     try {
       const result = await runScheduleNow(token);
-      const allErrors = [...result.plaid.errors, ...result.actual.errors];
+      const allErrors = [...result.plaid.errors, ...(result.teller?.errors ?? []), ...result.actual.errors];
+      const totalFetched = result.plaid.totalAdded + (result.teller?.totalAdded ?? 0);
       const msg = allErrors.length > 0
         ? `Completed with errors: ${allErrors.join('; ')}`
-        : `Done — fetched ${result.plaid.totalAdded}, imported ${result.actual.imported}.`;
+        : `Done — fetched ${totalFetched}, imported ${result.actual.imported}.`;
       setScheduleMsg(msg);
       // Refresh last-run status from server
       const s = await getSettings(token);
@@ -426,6 +535,132 @@ export function Settings() {
                   </button>
                 )
               }
+            </div>
+          </section>
+
+          {/* Teller section */}
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Teller</h2>
+
+            {/* Teller settings inline */}
+            <form onSubmit={saveTellerSettings} style={{ marginBottom: '1rem' }}>
+              <div className={styles.field}>
+                <label className={styles.label}>Application ID</label>
+                <input
+                  className={styles.input}
+                  type="text"
+                  value={tellerAppId}
+                  onChange={e => setTellerAppId(e.target.value)}
+                  placeholder="app_xxxxxx"
+                  spellCheck={false}
+                />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Environment</label>
+                <select
+                  className={styles.input}
+                  value={tellerEnv}
+                  onChange={e => setTellerEnv(e.target.value as 'sandbox' | 'development' | 'production')}
+                >
+                  <option value="sandbox">Sandbox (no cert needed)</option>
+                  <option value="development">Development</option>
+                  <option value="production">Production</option>
+                </select>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>
+                  Client Certificate (PEM) {settings?.teller_configured === 'true' && <span style={{ color: '#276749', fontWeight: 400 }}>✓ configured</span>}
+                </label>
+                <textarea
+                  className={styles.input}
+                  value={tellerCert}
+                  onChange={e => setTellerCert(e.target.value)}
+                  placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----&#10;(leave blank to keep current)"
+                  rows={3}
+                  style={{ fontFamily: 'monospace', fontSize: '0.75rem', resize: 'vertical' }}
+                  autoComplete="off"
+                />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Private Key (PEM)</label>
+                <textarea
+                  className={styles.input}
+                  value={tellerKey}
+                  onChange={e => setTellerKey(e.target.value)}
+                  placeholder="-----BEGIN EC PRIVATE KEY-----&#10;...&#10;-----END EC PRIVATE KEY-----&#10;(leave blank to keep current)"
+                  rows={3}
+                  style={{ fontFamily: 'monospace', fontSize: '0.75rem', resize: 'vertical' }}
+                  autoComplete="off"
+                />
+              </div>
+              {tellerSettingsMsg && (
+                <p className={tellerSettingsMsg.includes('aved') ? styles.success : styles.error}>{tellerSettingsMsg}</p>
+              )}
+              <button className={styles.ghostBtn} type="submit" disabled={tellerSettingsSaving}>
+                {tellerSettingsSaving ? 'Saving…' : 'Save Teller Settings'}
+              </button>
+            </form>
+
+            {/* Connected Teller enrollments */}
+            {tellerEnrollments.length === 0 && (
+              <p className={styles.qrInstructions}>No Teller banks connected yet.</p>
+            )}
+            {tellerEnrollments.map(enrollment => {
+              const mappedAccountIds = new Set(enrollment.accounts.map(a => a.teller_account_id));
+              const unmappedTellerAccounts = (enrollment.tellerAccounts ?? []).filter(
+                (ta: TellerAccountInfo) => ta.status === 'open' && !mappedAccountIds.has(ta.id),
+              );
+              return (
+                <div key={enrollment.id} style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <strong>{enrollment.institution_name}</strong>
+                    <button className={styles.dangerGhostBtn} type="button"
+                      onClick={() => void handleDisconnectTellerEnrollment(enrollment.id, enrollment.institution_name)}>
+                      Disconnect
+                    </button>
+                  </div>
+                  {enrollment.accounts.length === 0 && unmappedTellerAccounts.length === 0 && (
+                    <p className={styles.qrInstructions} style={{ margin: 0 }}>No accounts available.</p>
+                  )}
+                  {enrollment.accounts.map(acct => (
+                    <AccountRow
+                      key={acct.id}
+                      acct={acct}
+                      onUpdate={(name) => handleUpdateTellerAccount(acct.id, enrollment.id, name)}
+                      onDelete={() => void handleDeleteTellerAccount(acct.id, enrollment.id)}
+                      onLinkToActual={() => setLinkingAccount({ id: acct.id, name: acct.name })}
+                    />
+                  ))}
+                  {unmappedTellerAccounts.length > 0 && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <p style={{ fontSize: '0.8rem', color: '#718096', marginBottom: '0.25rem' }}>Available accounts (click to map):</p>
+                      {unmappedTellerAccounts.map((ta: TellerAccountInfo) => (
+                        <div key={ta.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.875rem' }}>
+                          <span style={{ flex: 1 }}>{ta.name} <span style={{ color: '#888', fontSize: '0.75em' }}>···{ta.last_four} ({ta.subtype})</span></span>
+                          <button className={styles.ghostBtn} type="button"
+                            onClick={() => void handleMapTellerAccount(enrollment.id, ta)}>
+                            Map account
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <div style={{ marginTop: '0.75rem' }}>
+              {tellerAppId ? (
+                <TellerConnectButton
+                  applicationId={tellerAppId}
+                  environment={tellerEnv}
+                  onSuccess={handleTellerSuccess}
+                />
+              ) : (
+                <p className={styles.qrInstructions} style={{ margin: 0, fontSize: '0.85rem' }}>
+                  Enter a Teller Application ID above and save to enable Teller Connect.
+                </p>
+              )}
             </div>
           </section>
         </div>
@@ -617,8 +852,12 @@ export function Settings() {
           onClose={() => setLinkingAccount(null)}
           onSaved={async () => {
             setLinkingAccount(null);
-            const items = await listPlaidItems(token);
+            const [items, enrollments] = await Promise.all([
+              listPlaidItems(token),
+              listTellerEnrollments(token),
+            ]);
             setPlaidItems(items);
+            setTellerEnrollments(enrollments);
           }}
         />
       )}

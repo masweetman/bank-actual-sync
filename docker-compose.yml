@@ -13,6 +13,10 @@ services:
       - PLAID_CLIENT_ID=${PLAID_CLIENT_ID}
       - PLAID_SECRET=${PLAID_SECRET}
       - PLAID_ENV=${PLAID_ENV:-production}
+      # Teller (optional — can also be configured via the Settings UI)
+      - TELLER_APPLICATION_ID=${TELLER_APPLICATION_ID:-}
+      - TELLER_ENV=${TELLER_ENV:-sandbox}
+      # Note: Teller mTLS cert & key are managed via the Settings UI (stored encrypted in DB)
     networks:
       - budget-net
     healthcheck:

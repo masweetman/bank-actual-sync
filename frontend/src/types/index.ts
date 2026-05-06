@@ -10,11 +10,35 @@ export interface PlaidItem {
   accounts: Account[];
 }
 
+export interface TellerEnrollment {
+  id: string;
+  enrollment_id: string;
+  institution_name: string;
+  last_synced_at: string | null;
+  created_at: string;
+  accounts: Account[];
+  tellerAccounts: TellerAccountInfo[];
+}
+
+export interface TellerAccountInfo {
+  id: string;
+  enrollment_id: string;
+  name: string;
+  type: string;
+  subtype: string;
+  status: string;
+  last_four: string;
+  institution: { id: string; name: string };
+}
+
 export interface Account {
   id: string;
   name: string;
-  plaid_item_id: string;
-  plaid_account_id: string;
+  provider?: 'plaid' | 'teller';
+  plaid_item_id: string | null;
+  plaid_account_id: string | null;
+  teller_enrollment_id?: string | null;
+  teller_account_id?: string | null;
   actual_id: string;
   actual_sync_id: string;
   created_at: string;
@@ -72,6 +96,9 @@ export interface AppSettings {
   schedule_cron?: string;
   schedule_last_run?: string;
   schedule_last_result?: string;
+  teller_application_id?: string;
+  teller_env?: string;
+  teller_configured?: string;
 }
 
 export interface AuthStatus {

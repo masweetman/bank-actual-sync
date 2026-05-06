@@ -1,7 +1,10 @@
 import { plaidRepository } from '../db/plaidRepository';
+import { tellerRepository } from '../db/tellerRepository';
 import { accountRepository } from '../db/accountRepository';
 import { repository } from '../db/repository';
+import { settingsRepo } from '../db/settingsRepository';
 import { syncTransactions, toInternalTransaction } from '../clients/plaidClient';
+import { buildTellerAgent, listTellerTransactions, toInternalTellerTransaction } from '../clients/tellerClient';
 import { importStagedTransactions } from '../clients/actualClient';
 import type { SyncResult } from '../types';
 
@@ -10,8 +13,14 @@ export interface PlaidSyncResult {
   errors: string[];
 }
 
+export interface TellerSyncResult {
+  totalAdded: number;
+  errors: string[];
+}
+
 export interface FullSyncResult {
   plaid: PlaidSyncResult;
+  teller: TellerSyncResult;
   actual: SyncResult;
 }
 
@@ -81,11 +90,74 @@ export async function runPlaidSync(): Promise<PlaidSyncResult> {
 }
 
 /**
- * Runs a complete sync: fetches from Plaid, then imports all staged
+ * Fetches new transactions from all connected Teller enrollments and
+ * upserts them into the local DB as 'staged'. Returns totals and any errors.
+ */
+export async function runTellerSync(): Promise<TellerSyncResult> {
+  const enrollments = tellerRepository.listAll();
+  let totalAdded = 0;
+  const errors: string[] = [];
+
+  if (enrollments.length === 0) {
+    return { totalAdded: 0, errors: [] };
+  }
+
+  const cert = settingsRepo.get('teller_cert') ?? '';
+  const key  = settingsRepo.get('teller_key')  ?? '';
+  const agent = buildTellerAgent(cert, key);
+
+  for (const enrollment of enrollments) {
+    const accessToken = tellerRepository.getAccessToken(enrollment.id);
+    if (!accessToken) {
+      errors.push(`Missing access token for ${enrollment.institution_name}`);
+      continue;
+    }
+
+    const mappedAccounts = accountRepository.listByEnrollment(enrollment.id);
+    if (mappedAccounts.length === 0) continue;
+
+    // Use last_synced_at - 10 days as start date (Teller recommendation for pending→posted)
+    let startDate: string;
+    if (enrollment.last_synced_at) {
+      const d = new Date(enrollment.last_synced_at);
+      d.setDate(d.getDate() - 10);
+      startDate = d.toISOString().slice(0, 10);
+    } else {
+      // First sync: go back 30 days
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      startDate = d.toISOString().slice(0, 10);
+    }
+
+    for (const acct of mappedAccounts) {
+      if (!acct.teller_account_id || !acct.actual_id) continue;
+      try {
+        const txs = await listTellerTransactions(accessToken, acct.teller_account_id, startDate, agent);
+        console.log(`[syncJob/teller] ${enrollment.institution_name} / ${acct.name}: ${txs.length} transactions`);
+        if (txs.length > 0) {
+          const internal = txs.map(tx => toInternalTellerTransaction(tx, acct.name, acct.actual_id));
+          repository.upsertMany(internal);
+          totalAdded += internal.length;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`[syncJob/teller] error for ${enrollment.institution_name} / ${acct.name}:`, err);
+        errors.push(`${enrollment.institution_name} / ${acct.name}: ${msg}`);
+      }
+    }
+
+    tellerRepository.updateLastSynced(enrollment.id, new Date().toISOString());
+  }
+
+  return { totalAdded, errors };
+}
+
+/**
+ * Runs a complete sync: fetches from Plaid and Teller, then imports all staged
  * transactions into Actual Budget and marks them synced.
  */
 export async function runFullSync(): Promise<FullSyncResult> {
-  const plaid = await runPlaidSync();
+  const [plaid, teller] = await Promise.all([runPlaidSync(), runTellerSync()]);
 
   const staged = repository.listStaged();
   let actual: SyncResult = { imported: 0, skipped: 0, errors: [], failedIds: [] };
@@ -99,5 +171,5 @@ export async function runFullSync(): Promise<FullSyncResult> {
     }
   }
 
-  return { plaid, actual };
+  return { plaid, teller, actual };
 }

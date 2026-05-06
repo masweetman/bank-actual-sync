@@ -7,8 +7,10 @@ import { repository } from '../db/repository';
 import { settingsRepo } from '../db/settingsRepository';
 import { accountRepository } from '../db/accountRepository';
 import { plaidRepository } from '../db/plaidRepository';
+import { tellerRepository } from '../db/tellerRepository';
 import { importStagedTransactions, fetchActualAccounts } from '../clients/actualClient';
 import { createLinkToken, createUpdateLinkToken, exchangePublicToken, removeItem } from '../clients/plaidClient';
+import { buildTellerAgent, listTellerAccounts } from '../clients/tellerClient';
 import { requireAuth, getJwtSecret } from './auth.middleware';
 import { runFullSync } from '../jobs/syncJob';
 import { restartScheduler } from '../jobs/scheduler';
@@ -185,7 +187,12 @@ router.post('/auth/2fa/disable', requireAuth, (req: Request, res: Response): voi
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
 router.get('/settings', requireAuth, (_req: Request, res: Response): void => {
-  res.json(settingsRepo.getPublic());
+  const pub = settingsRepo.getPublic();
+  // Expose whether Teller cert+key are configured without revealing the PEM content
+  pub['teller_configured'] = (
+    settingsRepo.has('teller_cert') && settingsRepo.has('teller_key')
+  ) ? 'true' : 'false';
+  res.json(pub);
 });
 
 router.put('/settings', requireAuth, (req: Request, res: Response): void => {
@@ -194,8 +201,10 @@ router.put('/settings', requireAuth, (req: Request, res: Response): void => {
     'actual_budget_id',
     'schedule_enabled',
     'schedule_cron',
+    'teller_application_id',
+    'teller_env',
   ];
-  const ALLOWED_SECRET = ['actual_password'];
+  const ALLOWED_SECRET = ['actual_password', 'teller_cert', 'teller_key'];
 
   const body = req.body as Record<string, unknown>;
 
@@ -233,8 +242,8 @@ router.put('/settings', requireAuth, (req: Request, res: Response): void => {
 /** Immediately runs a full Plaid → Actual sync outside the normal schedule. */
 router.post('/schedule/run-now', requireAuth, async (_req: Request, res: Response): Promise<void> => {
   try {
-    const { plaid, actual } = await runFullSync();
-    res.json({ plaid, actual });
+    const { plaid, teller, actual } = await runFullSync();
+    res.json({ plaid, teller, actual });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Sync failed' });
   }
@@ -306,6 +315,69 @@ router.get('/plaid/items', requireAuth, (_req: Request, res: Response): void => 
   res.json(itemsWithAccounts);
 });
 
+// ─── Teller Enrollments ──────────────────────────────────────────────────────
+
+/**
+ * Save a new Teller enrollment after the user completes Teller Connect.
+ * Body: { accessToken, enrollmentId, institutionName }
+ */
+router.post('/teller/enrollments', requireAuth, (req: Request, res: Response): void => {
+  const { accessToken, enrollmentId, institutionName } = req.body as Record<string, unknown>;
+  if (!accessToken || typeof accessToken !== 'string' ||
+      !enrollmentId || typeof enrollmentId !== 'string') {
+    res.status(400).json({ error: 'accessToken and enrollmentId are required strings' });
+    return;
+  }
+  try {
+    const enrollment = tellerRepository.create({
+      enrollment_id: enrollmentId,
+      institution_name: typeof institutionName === 'string' ? institutionName : enrollmentId,
+      access_token: accessToken,
+    });
+    res.status(201).json(enrollment);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to save enrollment' });
+  }
+});
+
+/** List all Teller enrollments, each with their live accounts fetched from Teller */
+router.get('/teller/enrollments', requireAuth, async (_req: Request, res: Response): Promise<void> => {
+  const enrollments = tellerRepository.listAll();
+  const cert = settingsRepo.get('teller_cert') ?? '';
+  const key  = settingsRepo.get('teller_key')  ?? '';
+  const agent = buildTellerAgent(cert, key);
+
+  const results = await Promise.all(enrollments.map(async enrollment => {
+    const accessToken = tellerRepository.getAccessToken(enrollment.id);
+    let tellerAccounts: unknown[] = [];
+    if (accessToken) {
+      try {
+        tellerAccounts = await listTellerAccounts(accessToken, agent);
+      } catch (err) {
+        console.warn(`[teller] failed to fetch accounts for ${enrollment.institution_name}:`, err instanceof Error ? err.message : err);
+      }
+    }
+    return {
+      ...enrollment,
+      accounts: accountRepository.listByEnrollment(enrollment.id),
+      tellerAccounts,
+    };
+  }));
+
+  res.json(results);
+});
+
+/** Remove a Teller enrollment (cascades to mapped accounts) */
+router.delete('/teller/enrollments/:id', requireAuth, (req: Request, res: Response): void => {
+  const enrollment = tellerRepository.getById(req.params.id);
+  if (!enrollment) {
+    res.status(404).json({ error: 'Enrollment not found' });
+    return;
+  }
+  tellerRepository.delete(req.params.id);
+  res.json({ success: true });
+});
+
 /** Remove a Plaid item (revokes access token + cascades to accounts in DB) */
 router.delete('/plaid/items/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const accessToken = plaidRepository.getAccessToken(req.params.id);
@@ -330,16 +402,33 @@ router.get('/accounts', requireAuth, (_req: Request, res: Response): void => {
 });
 
 router.post('/accounts', requireAuth, (req: Request, res: Response): void => {
-  const { name, plaid_item_id, plaid_account_id, actual_id, actual_sync_id } = req.body as Record<string, unknown>;
-  if (!name || !plaid_item_id || !plaid_account_id ||
-    typeof name !== 'string' || typeof plaid_item_id !== 'string' ||
-    typeof plaid_account_id !== 'string') {
-    res.status(400).json({ error: 'name, plaid_item_id, and plaid_account_id are required strings' });
+  const { name, plaid_item_id, plaid_account_id, teller_enrollment_id, teller_account_id, actual_id, actual_sync_id } = req.body as Record<string, unknown>;
+  if (!name || typeof name !== 'string') {
+    res.status(400).json({ error: 'name is a required string' });
     return;
   }
-  const account = accountRepository.create({
+
+  // Teller account
+  if (typeof teller_enrollment_id === 'string' && typeof teller_account_id === 'string') {
+    const account = accountRepository.createTeller({
+      name,
+      teller_enrollment_id,
+      teller_account_id,
+      actual_id:     typeof actual_id     === 'string' ? actual_id     : '',
+      actual_sync_id: typeof actual_sync_id === 'string' ? actual_sync_id : undefined,
+    });
+    res.status(201).json(account);
+    return;
+  }
+
+  // Plaid account
+  if (typeof plaid_item_id !== 'string' || typeof plaid_account_id !== 'string') {
+    res.status(400).json({ error: 'Either (plaid_item_id + plaid_account_id) or (teller_enrollment_id + teller_account_id) are required' });
+    return;
+  }
+  const account = accountRepository.createPlaid({
     name, plaid_item_id, plaid_account_id,
-    actual_id:    typeof actual_id    === 'string' ? actual_id    : '',
+    actual_id:     typeof actual_id     === 'string' ? actual_id     : '',
     actual_sync_id: typeof actual_sync_id === 'string' ? actual_sync_id : undefined,
   });
   res.status(201).json(account);

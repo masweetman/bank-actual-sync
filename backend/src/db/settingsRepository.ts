@@ -5,6 +5,8 @@ import { encrypt, decrypt } from '../utils/crypto';
 const ENCRYPTED_KEYS = new Set([
   'actual_password',
   'totp_secret',
+  'teller_cert',
+  'teller_key',
 ]);
 
 interface SettingsRow {
@@ -52,9 +54,9 @@ export const settingsRepo = {
     stmts.del().run(key);
   },
 
-  /** Returns all settings decrypted. Passwords are never included. */
+  /** Returns all settings decrypted. Passwords and private keys are never included. */
   getPublic(): Record<string, string> {
-    const SKIP = new Set(['actual_password', 'totp_secret', 'admin_password_hash', 'jwt_secret']);
+    const SKIP = new Set(['actual_password', 'totp_secret', 'admin_password_hash', 'jwt_secret', 'teller_cert', 'teller_key']);
     const rows = stmts.all().all() as unknown as SettingsRow[];
     const out: Record<string, string> = {};
     for (const row of rows) {
