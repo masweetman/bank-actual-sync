@@ -84,7 +84,7 @@ export async function importStagedTransactions(
               notes: t.memo,
               cleared: false,
             }));
-            await actualApi.importTransactions(actualAccountId, actualPending);
+            await actualApi.addTransactions(actualAccountId, actualPending);
             result.imported += pendingTxns.length;
           }
 
@@ -133,7 +133,7 @@ export async function importStagedTransactions(
                 notes: t.memo,
                 cleared: true,
               }));
-              await actualApi.importTransactions(actualAccountId, actualCleared);
+              await actualApi.addTransactions(actualAccountId, actualCleared);
               result.imported += toImport.length;
             }
           }

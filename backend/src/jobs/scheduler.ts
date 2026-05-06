@@ -32,11 +32,12 @@ export function startScheduler(): void {
     console.log(`[scheduler] Starting full sync at ${startedAt}`);
 
     try {
-      const { plaid, actual } = await runFullSync();
-      const allErrors = [...plaid.errors, ...actual.errors];
+      const { plaid, teller, actual } = await runFullSync();
+      const allErrors = [...plaid.errors, ...teller.errors, ...actual.errors];
+      const totalFetched = plaid.totalAdded + teller.totalAdded;
       const resultMsg = allErrors.length > 0
         ? `error: ${allErrors.join('; ')}`
-        : `success (fetched: ${plaid.totalAdded}, imported: ${actual.imported})`;
+        : `success (fetched: ${totalFetched}, imported: ${actual.imported})`;
       settingsRepo.set('schedule_last_run', startedAt);
       settingsRepo.set('schedule_last_result', resultMsg);
       console.log(`[scheduler] Done — ${resultMsg}`);
