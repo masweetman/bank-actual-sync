@@ -113,11 +113,15 @@ export async function importStagedTransactions(
               for (const t of withPendingId) {
                 const actualId = unclearedById.get(t.pending_transaction_id!);
                 if (actualId) {
-                  // Mark the existing pending transaction as cleared
-                  await (actualApi as any).updateTransaction(actualId, { cleared: true });
+                  // Match found — mark cleared and correct amount (posted amount may differ from pending hold)
+                  await (actualApi as any).updateTransaction(actualId, { cleared: true, amount: t.amount });
+                  result.imported += 1;
+                } else if (t.pending_transaction_id === t.id) {
+                  // Teller self-reference: pending was already cleared manually in Actual — skip to avoid duplicate.
+                  // The caller will still markSynced() for this transaction.
                   result.imported += 1;
                 } else {
-                  // Pending was never imported (or already cleared) — import as new
+                  // Plaid: pending was never imported (or already cleared) — import as new
                   toImport.push(t);
                 }
               }
