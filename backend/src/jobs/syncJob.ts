@@ -33,10 +33,6 @@ export async function runPlaidSync(): Promise<PlaidSyncResult> {
   let totalAdded = 0;
   const errors: string[] = [];
 
-  if (items.length === 0) {
-    return { totalAdded: 0, errors: ['No connected banks. Connect a bank in Settings first.'] };
-  }
-
   for (const item of items) {
     const accessToken = plaidRepository.getAccessToken(item.id);
     if (!accessToken) {
@@ -133,7 +129,9 @@ export async function runTellerSync(): Promise<TellerSyncResult> {
       if (!acct.teller_account_id || !acct.actual_id) continue;
       try {
         const txs = await listTellerTransactions(accessToken, acct.teller_account_id, startDate, agent);
-        console.log(`[syncJob/teller] ${enrollment.institution_name} / ${acct.name}: ${txs.length} transactions`);
+        const pendingCount = txs.filter(t => t.status === 'pending').length;
+        const postedCount  = txs.filter(t => t.status === 'posted').length;
+        console.log(`[syncJob/teller] ${enrollment.institution_name} / ${acct.name}: ${txs.length} transactions (${postedCount} posted, ${pendingCount} pending)`);
         if (txs.length > 0) {
           const internal = txs.map(tx => toInternalTellerTransaction(tx, acct.name, acct.actual_id));
           repository.upsertMany(internal);
