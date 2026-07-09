@@ -6,11 +6,10 @@
 
 | Severity | Concern | Evidence | Impact | Suggested action |
 |----------|---------|----------|--------|------------------|
-| High | Zero automated test coverage | `backend/package.json`, `frontend/package.json` — no test script or framework | Any refactor or dependency upgrade has no safety net; regressions are caught only in production | Add Vitest to both workspaces; start with unit tests for `utils/crypto.ts`, repositories, and `syncJob` |
 | High | Default admin password `"password"` seeded at first boot | `backend/src/server.ts` lines 49–55 | Deployed containers with unconfigured stacks are immediately compromised | Force password change on first login; remove the default seed or require a custom password via env var |
 | High | Raw `err.message` returned to API clients | `backend/src/api/routes.ts` (multiple catch blocks) | Internal error details (file paths, SDK internals, DB messages) leak to the browser | Map errors to safe user-facing messages at the route layer; log details server-side only |
 | Medium | No rate limiting on auth endpoints | `backend/src/api/routes.ts` — `POST /auth/login`, `POST /auth/verify-2fa` | Brute-force password or TOTP code attacks are unrestricted | Add `express-rate-limit` to `/auth/*` routes |
-| Medium | No CI/CD pipeline | No `.github/workflows/`, no other CI config found | Broken builds and regressions are not caught before merge; Docker images built manually | Add GitHub Actions workflow: lint → build → test (once tests exist) |
+| Medium | No CI/CD pipeline | No `.github/workflows/`, no other CI config found | Broken builds and regressions are not caught before merge; Docker images built manually | Add GitHub Actions workflow: lint → build → test |
 | Medium | `POST /api/schedule/run-now` not guarded by `syncInProgress` | `backend/src/server.ts` vs `backend/src/api/routes.ts` | Rapid API calls can launch concurrent Actual Budget SDK sessions, potentially corrupting the cache | Share the `syncInProgress` flag with the REST route, or serialize via a queue |
 | Low | No request timeout on Plaid / Teller HTTP calls | `backend/src/clients/plaidClient.ts`, `tellerClient.ts` | A hanging external request blocks the sync forever (no cancellation) | Set explicit timeout on Plaid `axios` config; set `timeout` on Teller `https.Agent` |
 | Low | Teller Plaid client is a lazy singleton; no reset if `PLAID_ENV` changes | `backend/src/clients/plaidClient.ts` | Changing `PLAID_ENV` in `.env` requires a full process restart — not obvious | Document this constraint or detect env change and rebuild |
@@ -58,9 +57,8 @@
 
 1. [ASK USER] Is Teller integration considered production-ready or experimental? (Affects how prominently concerns about mTLS cert storage should be documented.)
 2. [ASK USER] Is multi-user or multi-instance support a future goal? (Would require replacing SQLite with a server-based DB and redesigning auth.)
-3. [ASK USER] Are there plans to add a test suite? If so, is Vitest preferred (consistent with Vite) or Jest?
-4. [ASK USER] Is the default `"password"` seed intentional for all deployments, or is it a development convenience that should be removed before a public release?
-5. [ASK USER] Is the `POST /api/schedule/run-now` endpoint intended to be idempotent/concurrent-safe, or should it also respect the `syncInProgress` guard?
+3. [ASK USER] Is the default `"password"` seed intentional for all deployments, or is it a development convenience that should be removed before a public release?
+4. [ASK USER] Is the `POST /api/schedule/run-now` endpoint intended to be idempotent/concurrent-safe, or should it also respect the `syncInProgress` guard?
 
 ### 7) Evidence
 
@@ -70,5 +68,4 @@
 - `backend/src/db/schema.ts` (inline ALTER TABLE migrations)
 - `backend/src/db/repository.ts` (`upsertMany` loop, no explicit transaction)
 - `backend/src/api/auth.middleware.ts` (`getJwtSecret()` — DB-stored JWT secret)
-- `docs/codebase/.codebase-scan.txt` (directory tree, no test files)
 - git churn: `git log --since="90 days ago"` (6 hits each: `routes.ts`, `Settings.tsx`, `settingsApi.ts`)
