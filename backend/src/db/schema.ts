@@ -4,13 +4,13 @@ import path from 'path';
 import fs from 'fs';
 
 const DB_DIR = path.resolve(__dirname, '../../data');
-const DB_PATH = path.join(DB_DIR, 'transactions.db');
+const dbPath = process.env.DB_PATH ?? path.join(DB_DIR, 'transactions.db');
 
-if (!fs.existsSync(DB_DIR)) {
+if (dbPath !== ':memory:' && !fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR, { recursive: true });
 }
 
-export const db = new DatabaseSync(DB_PATH);
+export const db = new DatabaseSync(dbPath);
 
 // Enable WAL mode for better concurrent read performance
 db.exec('PRAGMA journal_mode = WAL');

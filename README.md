@@ -2,6 +2,58 @@
 
 Syncs transactions from bank accounts (via [Plaid](https://plaid.com)) into [Actual Budget](https://actualbudget.org).
 
+## Development
+
+### Prerequisites
+
+- Node.js 22.5+
+- npm 10+
+
+### Install dependencies
+
+```bash
+npm install
+```
+
+### Run in development mode (backend + frontend, hot-reload)
+
+```bash
+npm run dev
+```
+
+### Run tests
+
+```bash
+# All workspaces
+npm test
+
+# Backend only
+npm run test --workspace=backend
+
+# Frontend only
+npm run test --workspace=frontend
+
+# Watch mode (re-runs on file changes)
+npm run test:watch --workspace=backend
+npm run test:watch --workspace=frontend
+
+# Coverage report
+npm run test:coverage --workspace=backend
+npm run test:coverage --workspace=frontend
+```
+
+> **Backend tests** use an in-memory SQLite database (`DB_PATH=:memory:`) configured automatically by `backend/vitest.config.ts`. No external services are required.
+>
+> **Frontend tests** run in a jsdom environment with all API calls mocked via `vi.mock`.
+
+### Build for production
+
+```bash
+npm run build
+```
+
+---
+
 ## Architecture
 
 | Service | Description |
