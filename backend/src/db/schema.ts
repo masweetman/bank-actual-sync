@@ -177,4 +177,9 @@ export function initDb(): void {
       created_at       TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Migration: add status column to plaid_items for reconnect-needed detection
+  try {
+    db.exec(`ALTER TABLE plaid_items ADD COLUMN status TEXT NOT NULL DEFAULT 'good'`);
+  } catch { /* column already exists */ }
 }

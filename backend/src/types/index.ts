@@ -6,6 +6,7 @@ export interface PlaidItem {
   institution_id: string;
   institution_name: string;
   cursor: string;
+  status: 'good' | 'login_required';
   created_at: string;
 }
 

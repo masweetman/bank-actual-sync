@@ -118,6 +118,11 @@ export function Settings() {
   const [reconnectLoading, setReconnectLoading] = useState<string | null>(null);
   const [linkingAccount, setLinkingAccount] = useState<{ id: string; name: string } | null>(null);
 
+  // ── Plaid settings ─────────────────────────────────────────────────────────
+  const [plaidDaysRequested, setPlaidDaysRequested] = useState('90');
+  const [plaidSettingsSaving, setPlaidSettingsSaving] = useState(false);
+  const [plaidSettingsMsg, setPlaidSettingsMsg] = useState('');
+
   // ── Teller enrollments ─────────────────────────────────────────────────────
   const [tellerEnrollments, setTellerEnrollments] = useState<TellerEnrollment[]>([]);
   const [tellerAppId, setTellerAppId] = useState('');
@@ -177,6 +182,7 @@ export function Settings() {
       setScheduleCron(s.schedule_cron ?? '0 4 * * *');
       setScheduleLastRun(s.schedule_last_run);
       setScheduleLastResult(s.schedule_last_result);
+      setPlaidDaysRequested(s.plaid_days_requested ?? '90');
     }).catch(() => setLoadError('Failed to load settings'));
   }, [token]);
 
@@ -192,6 +198,25 @@ export function Settings() {
       setLinkLoading(false);
     }
   }, [token]);
+
+  const handleSavePlaidSettings = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    const days = parseInt(plaidDaysRequested, 10);
+    if (isNaN(days) || days < 1 || days > 730) {
+      setPlaidSettingsMsg('History depth must be between 1 and 730 days.');
+      return;
+    }
+    setPlaidSettingsSaving(true); setPlaidSettingsMsg('');
+    try {
+      await saveSettings(token, { plaid_days_requested: String(days) });
+      setPlaidSettingsMsg('Saved.');
+    } catch (err) {
+      setPlaidSettingsMsg(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setPlaidSettingsSaving(false);
+    }
+  };
 
   const handlePlaidSuccess = useCallback(async (publicToken: string, institutionId: string | null) => {
     if (!token) return;
@@ -504,12 +529,21 @@ export function Settings() {
             {plaidItems.map(item => (
               <div key={item.id} style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <strong>{item.institution_name}</strong>
+                  <strong>
+                    {item.institution_name}
+                    {item.status === 'login_required' && (
+                      <span style={{ marginLeft: '0.5rem', color: '#c53030', fontWeight: 600, fontSize: '0.75rem' }}>
+                        ⚠ Reconnect needed
+                      </span>
+                    )}
+                  </strong>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     {reconnectState?.itemId === item.id
                       ? <ReconnectButton linkToken={reconnectState.linkToken} onSuccess={handleReconnectSuccess} />
                       : (
-                        <button className={styles.ghostBtn} type="button"
+                        <button
+                          className={item.status === 'login_required' ? styles.saveBtn : styles.ghostBtn}
+                          type="button"
                           onClick={() => void handleReconnectBank(item.id)}
                           disabled={reconnectLoading === item.id}>
                           {reconnectLoading === item.id ? 'Loading…' : 'Reconnect'}
@@ -547,6 +581,33 @@ export function Settings() {
                 )
               }
             </div>
+          </section>
+
+          {/* Plaid settings */}
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Plaid Settings</h2>
+            <form onSubmit={handleSavePlaidSettings}>
+              <div className={styles.field}>
+                <label className={styles.label}>Transaction history depth (days)</label>
+                <input
+                  className={styles.input}
+                  type="number"
+                  min={1}
+                  max={730}
+                  value={plaidDaysRequested}
+                  onChange={e => setPlaidDaysRequested(e.target.value)}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted, #718096)' }}>
+                  Days of history to fetch when connecting a new bank (1–730, default 90). Applied on the next bank connection.
+                </span>
+              </div>
+              {plaidSettingsMsg && (
+                <p className={plaidSettingsMsg === 'Saved.' ? styles.success : styles.error}>{plaidSettingsMsg}</p>
+              )}
+              <button className={styles.ghostBtn} type="submit" disabled={plaidSettingsSaving}>
+                {plaidSettingsSaving ? 'Saving…' : 'Save Plaid Settings'}
+              </button>
+            </form>
           </section>
 
           {/* Teller section */}

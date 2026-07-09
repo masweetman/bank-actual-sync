@@ -3,7 +3,7 @@ import { tellerRepository } from '../db/tellerRepository';
 import { accountRepository } from '../db/accountRepository';
 import { repository } from '../db/repository';
 import { settingsRepo } from '../db/settingsRepository';
-import { syncTransactions, toInternalTransaction } from '../clients/plaidClient';
+import { syncTransactions, toInternalTransaction, getPlaidErrorCode } from '../clients/plaidClient';
 import { buildTellerAgent, listTellerTransactions, toInternalTellerTransaction } from '../clients/tellerClient';
 import { importStagedTransactions } from '../clients/actualClient';
 import type { SyncResult } from '../types';
@@ -75,9 +75,13 @@ export async function runPlaidSync(): Promise<PlaidSyncResult> {
       }
 
       plaidRepository.updateCursor(item.id, syncResult.nextCursor);
+      plaidRepository.updateStatus(item.id, 'good');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       console.error(`[syncJob] error for ${item.institution_name}:`, err);
+      if (getPlaidErrorCode(err) === 'ITEM_LOGIN_REQUIRED') {
+        plaidRepository.updateStatus(item.id, 'login_required');
+      }
       errors.push(`${item.institution_name}: ${msg}`);
     }
   }

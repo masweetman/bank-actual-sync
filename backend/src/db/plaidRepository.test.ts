@@ -102,4 +102,32 @@ describe('plaidRepository', () => {
       expect(plaidRepository.listAll()).toHaveLength(1);
     });
   });
+
+  describe('updateStatus', () => {
+    it('newly created items default to status "good"', () => {
+      const item = plaidRepository.create(ITEM_DATA);
+      expect(item.status).toBe('good');
+      expect(plaidRepository.getById(item.id)?.status).toBe('good');
+    });
+
+    it('persists login_required status', () => {
+      const item = plaidRepository.create(ITEM_DATA);
+      plaidRepository.updateStatus(item.id, 'login_required');
+      expect(plaidRepository.getById(item.id)?.status).toBe('login_required');
+    });
+
+    it('can clear login_required back to good', () => {
+      const item = plaidRepository.create(ITEM_DATA);
+      plaidRepository.updateStatus(item.id, 'login_required');
+      plaidRepository.updateStatus(item.id, 'good');
+      expect(plaidRepository.getById(item.id)?.status).toBe('good');
+    });
+
+    it('listAll returns the status field', () => {
+      const item = plaidRepository.create(ITEM_DATA);
+      plaidRepository.updateStatus(item.id, 'login_required');
+      const listed = plaidRepository.listAll().find(i => i.id === item.id);
+      expect(listed?.status).toBe('login_required');
+    });
+  });
 });

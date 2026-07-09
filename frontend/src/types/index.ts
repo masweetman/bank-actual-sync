@@ -6,6 +6,7 @@ export interface PlaidItem {
   institution_id: string;
   institution_name: string;
   cursor: string;
+  status?: 'good' | 'login_required';
   created_at: string;
   accounts: Account[];
 }
@@ -99,6 +100,7 @@ export interface AppSettings {
   teller_application_id?: string;
   teller_env?: string;
   teller_configured?: string;
+  plaid_days_requested?: string;
 }
 
 export interface AuthStatus {

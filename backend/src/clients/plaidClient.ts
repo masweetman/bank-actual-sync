@@ -34,15 +34,40 @@ function client(): PlaidApi {
   return _client ??= buildClient();
 }
 
+// ─── Error helper ────────────────────────────────────────────────────────────
+
+/**
+ * Extracts the Plaid error_code string from a Plaid SDK axios error.
+ * Returns null for non-Plaid or unrecognised errors.
+ */
+export function getPlaidErrorCode(err: unknown): string | null {
+  if (
+    err != null &&
+    typeof err === 'object' &&
+    'response' in err &&
+    (err as { response: unknown }).response != null &&
+    typeof (err as { response: unknown }).response === 'object' &&
+    'data' in (err as { response: object }).response &&
+    (err as { response: { data: unknown } }).response.data != null &&
+    typeof (err as { response: { data: unknown } }).response.data === 'object' &&
+    'error_code' in (err as { response: { data: object } }).response.data
+  ) {
+    const code = (err as { response: { data: { error_code: unknown } } }).response.data.error_code;
+    return typeof code === 'string' ? code : null;
+  }
+  return null;
+}
+
 // ─── Link Token ───────────────────────────────────────────────────────────────
 
-export async function createLinkToken(userId: string): Promise<string> {
+export async function createLinkToken(userId: string, daysRequested?: number): Promise<string> {
   const response = await client().linkTokenCreate({
     user: { client_user_id: userId },
     client_name: 'Bank Actual Sync',
     products: [Products.Transactions],
     country_codes: [CountryCode.Us],
     language: 'en',
+    transactions: { days_requested: daysRequested ?? 90 },
   });
   return response.data.link_token;
 }
@@ -143,47 +168,70 @@ export interface PlaidTransaction {
   pending: boolean;
   pending_transaction_id: string | null; // ID of the pending tx this posted tx was matched from
   category: string[] | null;
+  personal_finance_category: { primary: string; detailed: string } | null;
 }
 
 /**
  * Fetches all new/modified/removed transactions since the last cursor.
  * Paginates automatically until hasMore is false.
+ *
+ * Handles TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION by restarting pagination
+ * from the original preserved cursor, as required by the Plaid documentation.
+ * Retries up to MAX_RETRIES times before throwing.
  */
 export async function syncTransactions(
   accessToken: string,
   cursor: string,
 ): Promise<SyncTransactionsResult> {
-  const added: PlaidTransaction[]    = [];
-  const modified: PlaidTransaction[] = [];
-  const removed: string[]            = [];
+  const MAX_RETRIES = 3;
 
-  let currentCursor = cursor;
-  let hasMore = true;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const added: PlaidTransaction[]    = [];
+    const modified: PlaidTransaction[] = [];
+    const removed: string[]            = [];
+    let currentCursor = cursor; // always restart from the original preserved cursor
+    let hasMore = true;
+    let shouldRetry = false;
 
-  while (hasMore) {
-    const response = await client().transactionsSync({
-      access_token: accessToken,
-      cursor: currentCursor || undefined,
-      options: { include_personal_finance_category: false },
-    });
+    while (hasMore) {
+      let response;
+      try {
+        response = await client().transactionsSync({
+          access_token: accessToken,
+          cursor: currentCursor || undefined,
+          options: { include_personal_finance_category: true },
+        });
+      } catch (pageErr) {
+        if (getPlaidErrorCode(pageErr) === 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION') {
+          shouldRetry = true;
+          break;
+        }
+        throw pageErr;
+      }
 
-    const data = response.data;
+      const data = response.data;
 
-    for (const t of data.added) {
-      added.push(mapPlaidTransaction(t));
+      for (const t of data.added) {
+        added.push(mapPlaidTransaction(t));
+      }
+      for (const t of data.modified) {
+        modified.push(mapPlaidTransaction(t));
+      }
+      for (const t of data.removed) {
+        removed.push(t.transaction_id);
+      }
+
+      currentCursor = data.next_cursor;
+      hasMore = data.has_more;
     }
-    for (const t of data.modified) {
-      modified.push(mapPlaidTransaction(t));
-    }
-    for (const t of data.removed) {
-      removed.push(t.transaction_id);
-    }
 
-    currentCursor = data.next_cursor;
-    hasMore = data.has_more;
+    if (!shouldRetry) {
+      return { added, modified, removed, nextCursor: currentCursor, hasMore: false };
+    }
+    // Mutation occurred during pagination — discard partial results and restart from original cursor
   }
 
-  return { added, modified, removed, nextCursor: currentCursor, hasMore: false };
+  throw new Error('syncTransactions: TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION — max retries exceeded');
 }
 
 function mapPlaidTransaction(t: {
@@ -197,6 +245,7 @@ function mapPlaidTransaction(t: {
   pending: boolean;
   pending_transaction_id?: string | null;
   category?: string[] | null;
+  personal_finance_category?: { primary: string; detailed: string; confidence_level?: string | null } | null;
 }): PlaidTransaction {
   return {
     transaction_id: t.transaction_id,
@@ -209,6 +258,9 @@ function mapPlaidTransaction(t: {
     pending: t.pending,
     pending_transaction_id: t.pending_transaction_id ?? null,
     category: t.category ?? null,
+    personal_finance_category: t.personal_finance_category
+      ? { primary: t.personal_finance_category.primary, detailed: t.personal_finance_category.detailed }
+      : null,
   };
 }
 
@@ -229,6 +281,10 @@ export function toInternalTransaction(
   // Plaid positive=debit → our negative=debit. Multiply by -100 to convert dollars → cents and flip sign.
   const amountCents = Math.round(plaidTx.amount * -100);
 
+  const memo = plaidTx.personal_finance_category?.detailed
+    || plaidTx.personal_finance_category?.primary
+    || '';
+
   return {
     id: plaidTx.transaction_id,
     bank_account: accountName,
@@ -236,7 +292,7 @@ export function toInternalTransaction(
     date: plaidTx.date,
     amount: amountCents,
     payee: plaidTx.merchant_name ?? plaidTx.name,
-    memo: '',
+    memo,
     cleared: !plaidTx.pending,
     pending_transaction_id: plaidTx.pending_transaction_id,
     status: 'staged',

@@ -4,7 +4,7 @@ import type { PlaidItem, TellerEnrollment, Account, Transaction, SyncResult } fr
 // ─── Mock all external dependencies ──────────────────────────────────────────
 
 vi.mock('../db/plaidRepository', () => ({
-  plaidRepository: { listAll: vi.fn(), getAccessToken: vi.fn(), updateCursor: vi.fn() },
+  plaidRepository: { listAll: vi.fn(), getAccessToken: vi.fn(), updateCursor: vi.fn(), updateStatus: vi.fn() },
 }));
 vi.mock('../db/tellerRepository', () => ({
   tellerRepository: { listAll: vi.fn(), getAccessToken: vi.fn(), updateLastSynced: vi.fn() },
@@ -21,6 +21,7 @@ vi.mock('../db/settingsRepository', () => ({
 vi.mock('../clients/plaidClient', () => ({
   syncTransactions: vi.fn(),
   toInternalTransaction: vi.fn(),
+  getPlaidErrorCode: vi.fn(() => null),
 }));
 vi.mock('../clients/tellerClient', () => ({
   buildTellerAgent: vi.fn(() => ({})),
@@ -36,7 +37,7 @@ import { plaidRepository } from '../db/plaidRepository';
 import { tellerRepository } from '../db/tellerRepository';
 import { accountRepository } from '../db/accountRepository';
 import { repository } from '../db/repository';
-import { syncTransactions, toInternalTransaction } from '../clients/plaidClient';
+import { syncTransactions, toInternalTransaction, getPlaidErrorCode } from '../clients/plaidClient';
 import { importStagedTransactions } from '../clients/actualClient';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -154,6 +155,42 @@ describe('runPlaidSync', () => {
 
     await runPlaidSync();
     expect(repository.deleteStaged).toHaveBeenCalledWith('removed-tx-id');
+  });
+
+  it('sets status to "good" after a successful sync', async () => {
+    vi.mocked(plaidRepository.listAll).mockReturnValue([makePlaidItem()]);
+    vi.mocked(plaidRepository.getAccessToken).mockReturnValue('tok-abc');
+    vi.mocked(accountRepository.listByItem).mockReturnValue([makeAccount()]);
+    vi.mocked(syncTransactions).mockResolvedValue({
+      added: [], modified: [], removed: [],
+      nextCursor: 'cursor-new', hasMore: false,
+    });
+
+    await runPlaidSync();
+    expect(plaidRepository.updateStatus).toHaveBeenCalledWith('item-1', 'good');
+  });
+
+  it('sets status to "login_required" when ITEM_LOGIN_REQUIRED error is detected', async () => {
+    vi.mocked(plaidRepository.listAll).mockReturnValue([makePlaidItem()]);
+    vi.mocked(plaidRepository.getAccessToken).mockReturnValue('tok');
+    vi.mocked(accountRepository.listByItem).mockReturnValue([makeAccount()]);
+    vi.mocked(syncTransactions).mockRejectedValue(new Error('ITEM_LOGIN_REQUIRED'));
+    vi.mocked(getPlaidErrorCode).mockReturnValue('ITEM_LOGIN_REQUIRED');
+
+    const result = await runPlaidSync();
+    expect(plaidRepository.updateStatus).toHaveBeenCalledWith('item-1', 'login_required');
+    expect(result.errors).toHaveLength(1);
+  });
+
+  it('does not call updateStatus to login_required for non-auth errors', async () => {
+    vi.mocked(plaidRepository.listAll).mockReturnValue([makePlaidItem()]);
+    vi.mocked(plaidRepository.getAccessToken).mockReturnValue('tok');
+    vi.mocked(accountRepository.listByItem).mockReturnValue([makeAccount()]);
+    vi.mocked(syncTransactions).mockRejectedValue(new Error('Network timeout'));
+    vi.mocked(getPlaidErrorCode).mockReturnValue(null);
+
+    await runPlaidSync();
+    expect(plaidRepository.updateStatus).not.toHaveBeenCalledWith('item-1', 'login_required');
   });
 });
 

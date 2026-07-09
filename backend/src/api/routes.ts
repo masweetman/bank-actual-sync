@@ -203,6 +203,7 @@ router.put('/settings', requireAuth, (req: Request, res: Response): void => {
     'schedule_cron',
     'teller_application_id',
     'teller_env',
+    'plaid_days_requested',
   ];
   const ALLOWED_SECRET = ['actual_password', 'teller_cert', 'teller_key'];
 
@@ -212,6 +213,15 @@ router.put('/settings', requireAuth, (req: Request, res: Response): void => {
   if (typeof body['schedule_cron'] === 'string' && !cron.validate(body['schedule_cron'] as string)) {
     res.status(400).json({ error: 'Invalid cron expression' });
     return;
+  }
+
+  // Validate plaid_days_requested before persisting
+  if (typeof body['plaid_days_requested'] === 'string') {
+    const days = parseInt(body['plaid_days_requested'] as string, 10);
+    if (isNaN(days) || days < 1 || days > 730) {
+      res.status(400).json({ error: 'plaid_days_requested must be a whole number between 1 and 730' });
+      return;
+    }
   }
 
   let scheduleChanged = false;
@@ -254,7 +264,10 @@ router.post('/schedule/run-now', requireAuth, async (_req: Request, res: Respons
 /** Create a Link token so the frontend can open Plaid Link */
 router.post('/plaid/link-token', requireAuth, async (_req: Request, res: Response): Promise<void> => {
   try {
-    const linkToken = await createLinkToken('admin');
+    const daysRaw = settingsRepo.get('plaid_days_requested');
+    const daysNum = daysRaw ? parseInt(daysRaw, 10) : NaN;
+    const daysRequested = !isNaN(daysNum) && daysNum >= 1 && daysNum <= 730 ? daysNum : undefined;
+    const linkToken = await createLinkToken('admin', daysRequested);
     res.json({ link_token: linkToken });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to create link token' });

@@ -10,6 +10,7 @@ interface PlaidItemRow {
   institution_name: string;
   access_token: string; // encrypted
   cursor: string;
+  status: string;
   created_at: string;
 }
 
@@ -20,6 +21,7 @@ function toPlaidItem(row: PlaidItemRow): PlaidItem {
     institution_id: row.institution_id,
     institution_name: row.institution_name,
     cursor: row.cursor,
+    status: (row.status ?? 'good') as 'good' | 'login_required',
     created_at: row.created_at,
   };
 }
@@ -30,6 +32,7 @@ let _getAccessToken: ReturnType<typeof db.prepare> | null = null;
 let _getByInstitutionId: ReturnType<typeof db.prepare> | null = null;
 let _insert: ReturnType<typeof db.prepare> | null = null;
 let _updateCursor: ReturnType<typeof db.prepare> | null = null;
+let _updateStatus: ReturnType<typeof db.prepare> | null = null;
 let _delete: ReturnType<typeof db.prepare> | null = null;
 
 function listAllStmt()           { return _listAll            ??= db.prepare(`SELECT * FROM plaid_items ORDER BY institution_name`); }
@@ -38,6 +41,7 @@ function getAccessTokenStmt()    { return _getAccessToken     ??= db.prepare(`SE
 function getByInstitutionIdStmt(){ return _getByInstitutionId ??= db.prepare(`SELECT * FROM plaid_items WHERE institution_id = ? LIMIT 1`); }
 function insertStmt()            { return _insert             ??= db.prepare(`INSERT INTO plaid_items (id, item_id, institution_id, institution_name, access_token, cursor) VALUES ($id, $item_id, $institution_id, $institution_name, $access_token, $cursor)`); }
 function updateCursorStmt()      { return _updateCursor       ??= db.prepare(`UPDATE plaid_items SET cursor = $cursor WHERE id = $id`); }
+function updateStatusStmt()      { return _updateStatus       ??= db.prepare(`UPDATE plaid_items SET status = $status WHERE id = $id`); }
 function deleteStmt()            { return _delete             ??= db.prepare(`DELETE FROM plaid_items WHERE id = ?`); }
 
 export const plaidRepository = {
@@ -82,6 +86,7 @@ export const plaidRepository = {
       institution_id: data.institution_id,
       institution_name: data.institution_name,
       cursor: '',
+      status: 'good',
       created_at: new Date().toISOString(),
     };
   },
@@ -98,6 +103,10 @@ export const plaidRepository = {
 
   updateCursor(id: string, cursor: string): void {
     updateCursorStmt().run({ $id: id, $cursor: cursor });
+  },
+
+  updateStatus(id: string, status: 'good' | 'login_required'): void {
+    updateStatusStmt().run({ $id: id, $status: status });
   },
 
   delete(id: string): void {
