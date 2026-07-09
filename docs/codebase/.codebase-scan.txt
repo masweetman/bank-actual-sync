@@ -1,0 +1,296 @@
+
+=== DIRECTORY TREE (max depth 3, source files only) ===
+.env.example
+.gitignore
+README.md
+backend
+backend/Dockerfile
+backend/package.json
+backend/src
+backend/src/api
+backend/src/api/auth.middleware.ts
+backend/src/api/routes.ts
+backend/src/clients
+backend/src/clients/actualClient.ts
+backend/src/clients/plaidClient.ts
+backend/src/clients/tellerClient.ts
+backend/src/db
+backend/src/db/accountRepository.ts
+backend/src/db/plaidRepository.ts
+backend/src/db/repository.ts
+backend/src/db/schema.ts
+backend/src/db/settingsRepository.ts
+backend/src/db/tellerRepository.ts
+backend/src/jobs
+backend/src/jobs/scheduler.ts
+backend/src/jobs/syncJob.ts
+backend/src/server.ts
+backend/src/types
+backend/src/types/index.ts
+backend/src/utils
+backend/src/utils/crypto.ts
+backend/tsconfig.json
+docker-compose.yml
+docs
+docs/codebase
+docs/codebase/.codebase-scan.txt
+frontend
+frontend/Dockerfile
+frontend/index.html
+frontend/nginx.conf
+frontend/package.json
+frontend/src
+frontend/src/App.tsx
+frontend/src/assets
+frontend/src/assets/styles
+frontend/src/components
+frontend/src/components/LinkToActualModal
+frontend/src/components/LoginGate
+frontend/src/components/SyncStatus
+frontend/src/components/TellerConnectButton
+frontend/src/components/TransactionTable
+frontend/src/hooks
+frontend/src/hooks/useAuth.tsx
+frontend/src/hooks/useSocket.ts
+frontend/src/hooks/useTransactions.ts
+frontend/src/main.tsx
+frontend/src/pages
+frontend/src/pages/Dashboard
+frontend/src/pages/Settings
+frontend/src/services
+frontend/src/services/api.ts
+frontend/src/services/settingsApi.ts
+frontend/src/types
+frontend/src/types/index.ts
+frontend/src/utils
+frontend/src/utils/formatCurrency.ts
+frontend/src/vite-env.d.ts
+frontend/tsconfig.json
+frontend/tsconfig.node.json
+frontend/vite.config.ts
+package-lock.json
+package.json
+
+=== STACK DETECTION (manifest files) ===
+
+--- package-lock.json ---
+{
+  "name": "bank-actual-sync",
+  "version": "1.0.0",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "bank-actual-sync",
+      "version": "1.0.0",
+      "workspaces": [
+        "backend",
+        "frontend"
+      ],
+      "devDependencies": {
+        "concurrently": "^8.2.2"
+      }
+    },
+    "backend": {
+      "version": "1.0.0",
+      "dependencies": {
+        "@actual-app/api": "^26.5.0",
+        "bcrypt": "^5.1.1",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.19.2",
+        "jsonwebtoken": "^9.0.2",
+        "node-cron": "^3.0.3",
+        "otplib": "^12.0.1",
+        "plaid": "^42.2.0",
+        "qrcode": "^1.5.4",
+        "socket.io": "^4.8.1",
+        "uuid": "^10.0.0"
+      },
+      "devDependencies": {
+        "@types/bcrypt": "^5.0.2",
+        "@types/cors": "^2.8.17",
+        "@types/express": "^4.17.21",
+        "@types/jsonwebtoken": "^9.0.6",
+        "@types/node": "^22.0.0",
+        "@types/node-cron": "^3.0.11",
+        "@types/qrcode": "^1.5.5",
+        "@types/uuid": "^10.0.0",
+        "ts-node-dev": "^2.0.0",
+        "typescript": "^5.5.3"
+      }
+    },
+    "frontend": {
+      "version": "1.0.0",
+      "dependencies": {
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1",
+        "react-plaid-link": "^4.1.1",
+        "react-router-dom": "^6.26.1",
+        "socket.io-client": "^4.8.1",
+        "teller-connect-react": "^0.2.3"
+      },
+      "devDependencies": {
+        "@types/react": "^18.3.3",
+        "@types/react-dom": "^18.3.0",
+        "@vitejs/plugin-react": "^4.3.1",
+        "typescript": "^5.5.3",
+        "vite": "^5.4.0"
+      }
+    },
+    "node_modules/@actual-app/api": {
+      "version": "26.5.0",
+      "resolved": "https://registry.npmjs.org/@actual-app/api/-/api-26.5.0.tgz",
+      "integrity": "sha512-KnNlHsccQxsRPB+bDVCc9tTLM8m7p2an1hN0b7Eb8o2ZnLAx0sVIedBy0pwpxCONVlg12L98ULkRcQ/e04Fq3Q==",
+      "license": "MIT",
+      "dependencies": {
+        "@actual-app/core": "26.5.0",
+        "@actual-app/crdt": "2.1.0",
+        "better-sqlite3": "^12.8.0",
+        "compare-versions": "^6.1.1"
+      },
+      "engines": {
+        "node": ">=20"
+      }
+    },
+    "node_modules/@actual-app/core": {
+
+[TRUNCATED] Showing first 80 of 6283 lines.
+--- package.json ---
+{
+  "name": "bank-actual-sync",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently --names backend,frontend --prefix-colors cyan,magenta \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+
+
+=== ENTRY POINTS ===
+No common entry points found. Check 'main' or 'scripts.start' in manifest files above.
+
+=== LINTING AND FORMATTING CONFIG ===
+No linting or formatting config files found in project root.
+
+=== ENVIRONMENT VARIABLE TEMPLATES ===
+--- .env.example ---
+# ─── Encryption key (required) ───────────────────────────────────────────────
+# 64-character hex string used to encrypt sensitive settings in the database.
+# IMPORTANT: keep this secret. If not set, the server auto-generates one and
+# writes it here on first start.
+ENCRYPTION_KEY=<auto-generated on first start>
+
+# ─── Plaid credentials (required) ────────────────────────────────────────────
+# Create an account at https://dashboard.plaid.com/ to get these.
+PLAID_CLIENT_ID=your_client_id_here
+PLAID_SECRET=your_secret_here
+PLAID_ENV=production
+
+# PLAID_ENV controls which Plaid environment is used:
+#   production  — live bank data (default)
+#   sandbox     — fake test data from Plaid's sandbox
+# PLAID_ENV=production
+
+# ─── Optional port override ───────────────────────────────────────────────────
+# BACKEND_PORT=3001
+
+# ─── All other settings are configured through the Settings UI in the app. ───
+# Actual Budget connection (server URL, password, budget ID),
+# admin password, and 2FA secret are all stored encrypted in the SQLite DB.
+# You do NOT need to set those credentials here.
+
+
+=== TODO / FIXME / HACK (production code only, test dirs excluded) ===
+None found.
+
+=== GIT RECENT COMMITS (last 20) ===
+b8c5536 added reconciliation for cleared transactions
+660a6ab improved logging
+238295d fixed sync log UI. Changed importTransactions to addTransactions
+93cc208 Update packages
+d2e3905 added teller
+6d47025 fixed acct renaming
+f494493 cleaned up pending xactions (not supported by capital one)
+ac25200 added diagnostics
+03d94da Added bank re-connection
+28a0982 added pending transactions
+a9cbeb4 changed scheduler to cron-style
+68e412a fixed multiple accts
+1d32ed8 simplified account workflow
+778957d b
+e29994d fixed binding
+1f43fc3 added pull policy
+0d2c012 added default password
+fc4f32c fixed startup
+87f7b26 fixed binding
+ac59e4d fixed
+
+=== HIGH-CHURN FILES (last 90 days, top 20) ===
+   9 docker-compose.yml
+   7 backend/src/api/routes.ts
+   7 frontend/src/pages/Settings/Settings.tsx
+   7 frontend/src/services/settingsApi.ts
+   6 backend/src/clients/actualClient.ts
+   5 backend/src/db/accountRepository.ts
+   4 backend/src/jobs/syncJob.ts
+   4 backend/src/server.ts
+   4 README.md
+   4 backend/Dockerfile
+   3 backend/src/db/repository.ts
+   3 package-lock.json
+   3 backend/src/db/schema.ts
+   3 backend/src/types/index.ts
+   3 frontend/src/types/index.ts
+   3 backend/src/clients/plaidClient.ts
+   3 frontend/nginx.conf
+   2 backend/src/jobs/scheduler.ts
+   2 backend/package.json
+   2 backend/src/db/settingsRepository.ts
+
+=== MONOREPO SIGNALS ===
+package.json has 'workspaces' field (npm/yarn workspaces monorepo)
+
+=== CODE METRICS ===
+Total files scanned: 59
+Total lines of code: 11021
+
+Files by language:
+  TypeScript: 29
+  Other: 20
+  TypeScript/React: 10
+
+Top 10 largest files:
+package-lock.json: 220.4KB
+frontend/src/pages/Settings/Settings.tsx: 39.2KB
+backend/src/api/routes.ts: 20.2KB
+frontend/src/services/settingsApi.ts: 10.4KB
+backend/src/clients/actualClient.ts: 8.2KB
+backend/src/clients/plaidClient.ts: 7.8KB
+backend/src/db/schema.ts: 7.5KB
+backend/src/db/accountRepository.ts: 6.5KB
+frontend/src/components/TransactionTable/TransactionTable.tsx: 6.5KB
+backend/src/server.ts: 6.4KB
+
+=== CI/CD PIPELINES ===
+No CI/CD pipelines detected.
+
+=== CONTAINERS & ORCHESTRATION ===
+Orchestration: Docker Compose found
+
+=== SECURITY & COMPLIANCE ===
+No security configs detected.
+
+=== PERFORMANCE & TESTING ===
+No performance testing configs detected.
+
+=== SCAN COMPLETE ===
