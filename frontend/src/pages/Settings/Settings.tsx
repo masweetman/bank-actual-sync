@@ -68,13 +68,16 @@ function AccountRow({ acct, onUpdate, onDelete, onLinkToActual }: AccountRowProp
 
 interface PlaidConnectButtonProps {
   linkToken: string;
-  onSuccess: (publicToken: string) => Promise<void>;
+  onSuccess: (publicToken: string, institutionId: string | null) => Promise<void>;
 }
 
 function PlaidConnectButton({ linkToken, onSuccess }: PlaidConnectButtonProps) {
   const { open, ready } = usePlaidLink({
     token: linkToken,
-    onSuccess: (public_token) => { void onSuccess(public_token); },
+    onSuccess: (public_token, metadata) => {
+      const institutionId = metadata.institution?.institution_id ?? null;
+      void onSuccess(public_token, institutionId);
+    },
   });
   return (
     <button className={styles.saveBtn} type="button" onClick={() => open()} disabled={!ready}>
@@ -190,11 +193,18 @@ export function Settings() {
     }
   }, [token]);
 
-  const handlePlaidSuccess = useCallback(async (publicToken: string) => {
+  const handlePlaidSuccess = useCallback(async (publicToken: string, institutionId: string | null) => {
     if (!token) return;
     setBanksMsg('');
     try {
-      const { item, accounts } = await exchangePlaidToken(token, publicToken);
+      const result = await exchangePlaidToken(token, publicToken, institutionId ?? undefined);
+      if (result.duplicate) {
+        setLinkToken(null);
+        setBanksMsg('This institution is already connected. Launching reconnect flow…');
+        await handleReconnectBank(result.existingItemId);
+        return;
+      }
+      const { item, accounts } = result;
       setLinkToken(null);
       for (const a of accounts) {
         await createAccount(token, {
@@ -205,10 +215,11 @@ export function Settings() {
       }
       const items = await listPlaidItems(token);
       setPlaidItems(items);
-      setBanksMsg('Bank connected. Use “Link to Actual” to connect each account to your budget.');
+      setBanksMsg('Bank connected. Use "Link to Actual" to connect each account to your budget.');
     } catch (err) {
       setBanksMsg(err instanceof Error ? err.message : 'Failed to connect bank');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const handleReconnectBank = async (itemId: string) => {

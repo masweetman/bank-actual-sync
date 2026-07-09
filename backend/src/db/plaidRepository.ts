@@ -27,16 +27,18 @@ function toPlaidItem(row: PlaidItemRow): PlaidItem {
 let _listAll: ReturnType<typeof db.prepare> | null = null;
 let _getById: ReturnType<typeof db.prepare> | null = null;
 let _getAccessToken: ReturnType<typeof db.prepare> | null = null;
+let _getByInstitutionId: ReturnType<typeof db.prepare> | null = null;
 let _insert: ReturnType<typeof db.prepare> | null = null;
 let _updateCursor: ReturnType<typeof db.prepare> | null = null;
 let _delete: ReturnType<typeof db.prepare> | null = null;
 
-function listAllStmt()      { return _listAll       ??= db.prepare(`SELECT * FROM plaid_items ORDER BY institution_name`); }
-function getByIdStmt()      { return _getById       ??= db.prepare(`SELECT * FROM plaid_items WHERE id = ?`); }
-function getAccessTokenStmt() { return _getAccessToken ??= db.prepare(`SELECT access_token FROM plaid_items WHERE id = ?`); }
-function insertStmt()       { return _insert        ??= db.prepare(`INSERT INTO plaid_items (id, item_id, institution_id, institution_name, access_token, cursor) VALUES ($id, $item_id, $institution_id, $institution_name, $access_token, $cursor)`); }
-function updateCursorStmt() { return _updateCursor  ??= db.prepare(`UPDATE plaid_items SET cursor = $cursor WHERE id = $id`); }
-function deleteStmt()       { return _delete        ??= db.prepare(`DELETE FROM plaid_items WHERE id = ?`); }
+function listAllStmt()           { return _listAll            ??= db.prepare(`SELECT * FROM plaid_items ORDER BY institution_name`); }
+function getByIdStmt()           { return _getById            ??= db.prepare(`SELECT * FROM plaid_items WHERE id = ?`); }
+function getAccessTokenStmt()    { return _getAccessToken     ??= db.prepare(`SELECT access_token FROM plaid_items WHERE id = ?`); }
+function getByInstitutionIdStmt(){ return _getByInstitutionId ??= db.prepare(`SELECT * FROM plaid_items WHERE institution_id = ? LIMIT 1`); }
+function insertStmt()            { return _insert             ??= db.prepare(`INSERT INTO plaid_items (id, item_id, institution_id, institution_name, access_token, cursor) VALUES ($id, $item_id, $institution_id, $institution_name, $access_token, $cursor)`); }
+function updateCursorStmt()      { return _updateCursor       ??= db.prepare(`UPDATE plaid_items SET cursor = $cursor WHERE id = $id`); }
+function deleteStmt()            { return _delete             ??= db.prepare(`DELETE FROM plaid_items WHERE id = ?`); }
 
 export const plaidRepository = {
   listAll(): PlaidItem[] {
@@ -82,6 +84,16 @@ export const plaidRepository = {
       cursor: '',
       created_at: new Date().toISOString(),
     };
+  },
+
+  /**
+   * Returns the first Plaid item with the given institution_id, or null.
+   * Guards against empty strings to avoid false matches on legacy rows.
+   */
+  getByInstitutionId(institutionId: string): PlaidItem | null {
+    if (!institutionId) return null;
+    const row = getByInstitutionIdStmt().get(institutionId) as PlaidItemRow | undefined;
+    return row ? toPlaidItem(row) : null;
   },
 
   updateCursor(id: string, cursor: string): void {

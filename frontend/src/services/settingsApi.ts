@@ -102,17 +102,28 @@ export async function createLinkToken(token: string): Promise<string> {
 export async function exchangePlaidToken(
   token: string,
   publicToken: string,
-): Promise<{ item: PlaidItem; accounts: PlaidAccountInfo[] }> {
+  institutionId?: string,
+): Promise<
+  | { duplicate: false; item: PlaidItem; accounts: PlaidAccountInfo[] }
+  | { duplicate: true; existingItemId: string }
+> {
+  const body: Record<string, string> = { public_token: publicToken };
+  if (institutionId) body.institution_id = institutionId;
   const res = await fetch(`${API}/plaid/exchange-token`, {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify({ public_token: publicToken }),
+    body: JSON.stringify(body),
   });
+  if (res.status === 409) {
+    const { existing_item_id } = (await res.json()) as { existing_item_id: string };
+    return { duplicate: true, existingItemId: existing_item_id };
+  }
   if (!res.ok) {
     const { error } = (await res.json()) as { error: string };
     throw new Error(error ?? 'Failed to exchange Plaid token');
   }
-  return res.json() as Promise<{ item: PlaidItem; accounts: PlaidAccountInfo[] }>;
+  const data = (await res.json()) as { item: PlaidItem; accounts: PlaidAccountInfo[] };
+  return { duplicate: false, ...data };
 }
 
 export async function listPlaidItems(token: string): Promise<PlaidItem[]> {

@@ -71,6 +71,24 @@ describe('plaidRepository', () => {
     });
   });
 
+  describe('getByInstitutionId', () => {
+    it('returns the item when institution_id matches', () => {
+      const item = plaidRepository.create(ITEM_DATA);
+      const found = plaidRepository.getByInstitutionId('ins-001');
+      expect(found?.id).toBe(item.id);
+      expect(found?.institution_id).toBe('ins-001');
+    });
+
+    it('returns null when institution_id does not match', () => {
+      plaidRepository.create(ITEM_DATA);
+      expect(plaidRepository.getByInstitutionId('ins-999')).toBeNull();
+    });
+
+    it('returns null for an empty institution_id (guard against legacy rows)', () => {
+      expect(plaidRepository.getByInstitutionId('')).toBeNull();
+    });
+  });
+
   describe('delete', () => {
     it('removes the item from the list', () => {
       const item = plaidRepository.create(ITEM_DATA);

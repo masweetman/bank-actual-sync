@@ -284,15 +284,51 @@ router.post('/plaid/reconnect-link-token', requireAuth, async (req: Request, res
 /**
  * Exchange a public_token from Plaid Link.
  * Saves the item + access_token, returns discovered accounts for the user to map.
+ *
+ * Accepts an optional `institution_id` from the onSuccess metadata to detect
+ * duplicates before exchanging the token (avoids unnecessary Plaid billing).
+ * Returns 409 with `existing_item_id` when the institution is already connected.
  */
 router.post('/plaid/exchange-token', requireAuth, async (req: Request, res: Response): Promise<void> => {
-  const { public_token } = req.body as { public_token?: string };
+  const { public_token, institution_id } = req.body as { public_token?: string; institution_id?: string };
   if (!public_token || typeof public_token !== 'string') {
     res.status(400).json({ error: 'public_token is required' });
     return;
   }
+
+  // Primary duplicate check: institution_id from onSuccess metadata (no token exchange needed)
+  if (institution_id && typeof institution_id === 'string') {
+    const existing = plaidRepository.getByInstitutionId(institution_id);
+    if (existing) {
+      res.status(409).json({
+        error: 'This institution is already connected. Use Reconnect to re-authenticate.',
+        existing_item_id: existing.id,
+      });
+      return;
+    }
+  }
+
   try {
     const result = await exchangePublicToken(public_token);
+
+    // Fallback duplicate check: institution_id from the newly exchanged item
+    if (result.institution_id) {
+      const existing = plaidRepository.getByInstitutionId(result.institution_id);
+      if (existing) {
+        // Remove the duplicate Item at Plaid to avoid billing, then reject
+        try {
+          await removeItem(result.access_token);
+        } catch (cleanupErr) {
+          console.warn('[plaid] failed to remove duplicate item:', cleanupErr instanceof Error ? cleanupErr.message : cleanupErr);
+        }
+        res.status(409).json({
+          error: 'This institution is already connected. Use Reconnect to re-authenticate.',
+          existing_item_id: existing.id,
+        });
+        return;
+      }
+    }
+
     const item = plaidRepository.create({
       item_id: result.item_id,
       institution_id: result.institution_id,
